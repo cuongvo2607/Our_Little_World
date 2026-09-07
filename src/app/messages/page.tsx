@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useCouple } from '@/context/CoupleContext';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { triggerHeartConfetti } from '@/lib/utils';
 import { LoveMessage } from '@/types';
@@ -26,12 +25,14 @@ export default function MessagesPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
-  // Scroll to bottom helper
+  // Scroll to bottom helper using requestAnimationFrame for zero-lag layout response
   const scrollToBottom = useCallback((smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: smooth ? 'smooth' : 'auto',
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+      });
+      setShowScrollBottomBtn(false);
     });
-    setShowScrollBottomBtn(false);
   }, []);
 
   // Check scroll position for floating "New Messages" pill
@@ -56,7 +57,7 @@ export default function MessagesPage() {
 
       if (error) throw error;
       setMessages(data || []);
-      setTimeout(() => scrollToBottom(false), 100);
+      scrollToBottom(false);
     } catch (err) {
       console.error('Fetch messages error:', err);
     } finally {
@@ -121,7 +122,7 @@ export default function MessagesPage() {
             const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
             const isNearBottom = scrollHeight - scrollTop - clientHeight <= 150;
             if (isNearBottom || newMsg.sender_id === user?.id) {
-              setTimeout(() => scrollToBottom(true), 50);
+              scrollToBottom(true);
             } else {
               setShowScrollBottomBtn(true);
             }
@@ -213,7 +214,7 @@ export default function MessagesPage() {
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
-    setTimeout(() => scrollToBottom(true), 50);
+    scrollToBottom(true);
 
     try {
       const { data, error } = await supabase
@@ -229,7 +230,6 @@ export default function MessagesPage() {
 
       if (error) throw error;
 
-      // Replace temp optimistic message with real DB message (if not replaced already by Realtime handler)
       if (data) {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? data : m))
@@ -237,7 +237,6 @@ export default function MessagesPage() {
       }
     } catch (err) {
       console.error('Error sending message:', err);
-      // Remove optimistic message if insert failed
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
@@ -245,11 +244,11 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-5.5rem)] lg:h-[calc(100vh-3rem)] max-w-full relative overflow-hidden">
-      {/* Chat Room Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-white/80 dark:bg-charcoal-800/80 backdrop-blur-md rounded-2xl border border-rose-100 dark:border-rose-900/30 shadow-soft-sm mb-2 shrink-0">
+    <div className="h-[100dvh] w-full flex flex-col relative overflow-hidden bg-cream-50/60 dark:bg-charcoal-900/60">
+      {/* 1. CHAT HEADER */}
+      <div className="shrink-0 z-20 px-3.5 py-2.5 bg-white/90 dark:bg-charcoal-800/90 backdrop-blur-md border-b border-rose-100 dark:border-rose-900/30 shadow-soft-sm flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-lavender-200 overflow-hidden border border-rose-200 shrink-0 ring-2 ring-emerald-400 ring-offset-1">
+          <div className="relative w-9 h-9 rounded-full bg-lavender-200 overflow-hidden border border-rose-200 shrink-0">
             {partnerProfile?.avatar_url ? (
               <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
             ) : (
@@ -257,6 +256,7 @@ export default function MessagesPage() {
                 {partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'}
               </span>
             )}
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white dark:border-charcoal-800" />
           </div>
           <div>
             <h2 className="text-xs font-bold text-charcoal-800 dark:text-cream-50">
@@ -280,92 +280,94 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* Chat Messages Scroll Container */}
+      {/* 2. MESSAGE LIST (MAIN SCROLL CONTAINER & ANCHORED TO BOTTOM WHEN FEW) */}
       <div
         ref={chatContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-1 py-3 space-y-3 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-3 scroll-smooth relative"
       >
         {loading ? (
           <div className="text-center py-12">
             <p className="text-xs text-gray-400">Đang tải cuộc trò chuyện...</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center py-16 space-y-2">
-            <Heart className="w-10 h-10 mx-auto text-rose-300 animate-bounce fill-rose-100" />
+          <div className="h-full flex flex-col items-center justify-center space-y-2 text-center py-12">
+            <Heart className="w-10 h-10 text-rose-300 animate-bounce fill-rose-100" />
             <p className="text-xs text-gray-400">
               Chưa có tin nhắn nào. Hãy gửi lời chào đầu tiên!
             </p>
           </div>
         ) : (
-          messages.map((msg) => {
-            const isMine = msg.sender_id === user?.id;
-            const timeStr = new Date(msg.created_at).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+          /* Inner Message Container anchored to bottom using justify-end */
+          <div className="flex flex-col justify-end min-h-full space-y-3">
+            {messages.map((msg) => {
+              const isMine = msg.sender_id === user?.id;
+              const timeStr = new Date(msg.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
 
-            return (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}
-              >
-                {/* Partner Avatar on Left */}
-                {!isMine && (
-                  <div className="w-7 h-7 rounded-full bg-lavender-200 overflow-hidden shrink-0 border border-rose-100 mb-1">
-                    {partnerProfile?.avatar_url ? (
-                      <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="flex items-center justify-center h-full text-[10px] font-bold text-purple-600">
-                        {partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Message Bubble */}
-                <div
-                  className={`max-w-[78%] px-3.5 py-2 rounded-2xl text-xs space-y-0.5 shadow-soft-sm ${
-                    isMine
-                      ? 'bg-gradient-to-r from-rose-400 to-rose-500 text-white rounded-br-xs'
-                      : 'bg-white dark:bg-charcoal-800 text-charcoal-800 dark:text-cream-50 border border-rose-100 dark:border-rose-900/30 rounded-bl-xs'
-                  }`}
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
-                    {msg.message || (msg.type === 'miss_you' ? 'Tớ nhớ cậu 🫶' : 'Yêu cậu ❤️')}
-                  </p>
+                  {/* Partner Avatar on Left */}
+                  {!isMine && (
+                    <div className="w-7 h-7 rounded-full bg-lavender-200 overflow-hidden shrink-0 border border-rose-100 mb-1">
+                      {partnerProfile?.avatar_url ? (
+                        <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="flex items-center justify-center h-full text-[10px] font-bold text-purple-600">
+                          {partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
+                  {/* Message Bubble */}
                   <div
-                    className={`text-[9px] flex items-center justify-end gap-1 ${
-                      isMine ? 'text-rose-100' : 'text-gray-400'
+                    className={`max-w-[78%] px-3.5 py-2 rounded-2xl text-xs space-y-0.5 shadow-soft-sm ${
+                      isMine
+                        ? 'bg-gradient-to-r from-rose-400 to-[#E86D91] text-white rounded-br-xs'
+                        : 'bg-white dark:bg-charcoal-800 text-charcoal-800 dark:text-cream-50 border border-rose-100 dark:border-rose-900/30 rounded-bl-xs'
                     }`}
                   >
-                    <span>{timeStr}</span>
-                    {isMine && <span>✓</span>}
-                  </div>
-                </div>
+                    <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                      {msg.message || (msg.type === 'miss_you' ? 'Tớ nhớ cậu 🫶' : 'Yêu cậu ❤️')}
+                    </p>
 
-                {/* User Avatar on Right */}
-                {isMine && (
-                  <div className="w-7 h-7 rounded-full bg-rose-200 overflow-hidden shrink-0 border border-rose-100 mb-1">
-                    {userProfile?.avatar_url ? (
-                      <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="flex items-center justify-center h-full text-[10px] font-bold text-rose-600">
-                        {userProfile?.display_name?.charAt(0).toUpperCase() || 'U'}
-                      </span>
-                    )}
+                    <div
+                      className={`text-[9px] flex items-center justify-end gap-1 ${
+                        isMine ? 'text-rose-100' : 'text-gray-400'
+                      }`}
+                    >
+                      <span>{timeStr}</span>
+                      {isMine && <span>✓</span>}
+                    </div>
                   </div>
-                )}
-              </motion.div>
-            );
-          })
+
+                  {/* User Avatar on Right */}
+                  {isMine && (
+                    <div className="w-7 h-7 rounded-full bg-rose-200 overflow-hidden shrink-0 border border-rose-100 mb-1">
+                      {userProfile?.avatar_url ? (
+                        <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="flex items-center justify-center h-full text-[10px] font-bold text-rose-600">
+                          {userProfile?.display_name?.charAt(0).toUpperCase() || 'U'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Floating "New Message" Scroll Pill */}
@@ -376,7 +378,7 @@ export default function MessagesPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             onClick={() => scrollToBottom(true)}
-            className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-rose-500 text-white text-xs font-semibold rounded-full shadow-soft-lg flex items-center gap-1.5 active:scale-95 transition-transform"
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 px-3.5 py-1.5 bg-[#E86D91] text-white text-xs font-semibold rounded-full shadow-soft-lg flex items-center gap-1.5 active:scale-95 transition-transform"
           >
             <ArrowDown className="w-3.5 h-3.5" /> Tin nhắn mới ↓
           </motion.button>
@@ -390,7 +392,7 @@ export default function MessagesPage() {
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute bottom-16 left-3 z-30 p-2 glass-card rounded-2xl shadow-soft-lg flex items-center gap-2 border border-rose-200"
+            className="absolute bottom-24 left-3 z-40 p-2 glass-card rounded-2xl shadow-soft-lg flex items-center gap-2 border border-rose-200"
           >
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -424,7 +426,7 @@ export default function MessagesPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute bottom-16 right-12 z-30 p-2.5 glass-card rounded-2xl shadow-soft-lg grid grid-cols-4 gap-2 border border-rose-200"
+            className="absolute bottom-24 right-12 z-40 p-2.5 glass-card rounded-2xl shadow-soft-lg grid grid-cols-4 gap-2 border border-rose-200"
           >
             {EMOJI_PRESETS.map((emoji) => (
               <motion.button
@@ -445,8 +447,8 @@ export default function MessagesPage() {
         )}
       </AnimatePresence>
 
-      {/* Chat Input Bar fixed at bottom */}
-      <div className="shrink-0 pt-2 pb-safe px-1 bg-cream-50/95 dark:bg-charcoal-900/95 backdrop-blur-md border-t border-rose-100 dark:border-rose-950/30">
+      {/* 3. MESSAGE COMPOSER INPUT BAR (RIGHT ABOVE BOTTOM NAV WITH 8-12PX SPACING) */}
+      <div className="shrink-0 pt-2 px-2 z-30 bg-cream-50/95 dark:bg-charcoal-900/95 backdrop-blur-md border-t border-rose-100/60 dark:border-rose-950/30 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,12px)+8px)]">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -464,7 +466,7 @@ export default function MessagesPage() {
             }}
             className={`p-2.5 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
               showQuickMenu
-                ? 'bg-rose-500 text-white'
+                ? 'bg-[#E86D91] text-white'
                 : 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300'
             }`}
           >
@@ -488,7 +490,7 @@ export default function MessagesPage() {
               setShowEmojiPicker(!showEmojiPicker);
               setShowQuickMenu(false);
             }}
-            className="p-2.5 text-gray-400 hover:text-rose-500 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2.5 text-gray-400 hover:text-[#E86D91] rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
             <Smile className="w-5 h-5" />
           </motion.button>
@@ -497,7 +499,7 @@ export default function MessagesPage() {
           <Button
             type="submit"
             disabled={!inputMsg.trim() || sending}
-            className="p-2.5 rounded-full min-h-[44px] min-w-[44px]"
+            className="p-2.5 rounded-full min-h-[44px] min-w-[44px] bg-[#E86D91] hover:bg-rose-600 text-white"
           >
             <Send className="w-4 h-4" />
           </Button>

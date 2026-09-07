@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { MemoryImage } from '@/components/ui/MemoryImage';
+import { batchResolveStorageUrls } from '@/lib/storage';
 import {
   calculateLoveDuration,
   getDaysTogether,
@@ -47,7 +49,7 @@ const MOOD_OPTIONS: { emoji: MoodEmoji; label: string }[] = [
 export default function HomePage() {
   const { user, userProfile, partnerProfile, couple, partnerMood, myMood, loading: contextLoading, refreshData } = useCouple();
 
-  const [recentMemories, setRecentMemories] = useState<Memory[]>([]);
+  const [recentMemories, setRecentMemories] = useState<(Memory & { signed_url?: string })[]>([]);
   const [totalMemoriesCount, setTotalMemoriesCount] = useState<number>(0);
   const [upcomingCapsule, setUpcomingCapsule] = useState<TimeCapsule | null>(null);
   const [loadingExtra, setLoadingExtra] = useState(true);
@@ -90,7 +92,11 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      setRecentMemories(memoryData || []);
+      if (memoryData) {
+        // Parallel batch resolution of signed URLs
+        const resolvedMemories = await batchResolveStorageUrls(supabase, memoryData);
+        setRecentMemories(resolvedMemories);
+      }
 
       // Fetch Next Time Capsule
       const { data: capsuleData } = await supabase
@@ -185,7 +191,7 @@ export default function HomePage() {
     couple?.name ||
     `${userProfile?.display_name || 'Cường'} & ${partnerProfile?.display_name || 'Trinh'}`;
 
-  // Dynamic Relative Timestamps for Moods (Không dùng thời gian cố định!)
+  // Dynamic Relative Timestamps for Moods
   const myMoodTimeStr = formatRelativeTime(myMood?.created_at);
   const partnerMoodTimeStr = formatRelativeTime(partnerMood?.created_at);
 
@@ -194,7 +200,7 @@ export default function HomePage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="max-w-[760px] mx-auto space-y-4 py-2 px-3 sm:px-4 pb-28 sm:pb-32"
+      className="max-w-[760px] mx-auto space-y-4 py-2 px-1 sm:px-2"
     >
       {/* Toast Notification */}
       <AnimatePresence>
@@ -451,7 +457,7 @@ export default function HomePage() {
 
         {loadingExtra ? (
           /* Skeleton Loading for Memories */
-          <div className="aspect-[16/9] rounded-[22px] bg-rose-100/60 dark:bg-rose-950/40 animate-pulse flex items-center justify-center text-xs text-[#81727B]">
+          <div className="aspect-[16/9] rounded-[22px] bg-[#FCE7EF]/40 dark:bg-rose-950/40 animate-pulse flex items-center justify-center text-xs text-[#81727B]">
             Đang tải khoảnh khắc đẹp...
           </div>
         ) : recentMemories.length > 0 ? (
@@ -462,21 +468,22 @@ export default function HomePage() {
                 href="/memories"
                 className="block group snap-start shrink-0 w-[90%] sm:w-[80%]"
               >
-                <div className="relative aspect-[16/9] rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-charcoal-900">
-                  <img
-                    src={mem.image_url}
+                <div className="relative rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)]">
+                  {/* Optimized Next/Image Memory Display */}
+                  <MemoryImage
+                    src={mem.signed_url || mem.image_url}
                     alt={mem.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
+                    priority={index === 0}
+                    aspectRatio="aspect-[16/9]"
                   />
 
                   {/* Top-Right Image Counter Pill */}
-                  <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full border border-white/20">
+                  <div className="absolute top-3 right-3 z-20 bg-black/50 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full border border-white/20">
                     {index + 1}/{totalMemoriesCount || recentMemories.length}
                   </div>
 
                   {/* Bottom Gradient Overlay & Caption */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-4 text-white">
+                  <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-4 text-white">
                     <h4 className="text-sm sm:text-base font-bold text-white line-clamp-1">{mem.title}</h4>
                     <p className="text-[11px] text-rose-200 font-medium flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3 text-rose-300" /> {formatDateVietnamese(mem.memory_date)}

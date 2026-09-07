@@ -9,6 +9,7 @@
     --text-primary: #2D2727;
     --text-secondary: #7A7274;
     --border-color: rgba(232, 160, 191, 0.25);
+    --bottom-nav-height: 60px;
   }
 
   .dark {
@@ -31,7 +32,9 @@
     overflow-x: hidden;
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    width: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
   }
 
   a {
@@ -52,9 +55,14 @@
   border: 1px solid var(--border-color);
 }
 
+/* Standard Bottom Navigation Spacing for Content */
+.pb-nav-safe {
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 12px) + 16px);
+}
+
 /* Safe area insets for iOS devices */
 .pb-safe {
-  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 20px));
+  padding-bottom: max(env(safe-area-inset-bottom, 12px), 8px);
 }
 
 .pt-safe {
@@ -62,7 +70,7 @@
 }
 
 .mb-safe {
-  margin-bottom: env(safe-area-inset-bottom, 20px);
+  margin-bottom: env(safe-area-inset-bottom, 12px);
 }
 
 /* Custom smooth scrollbar */

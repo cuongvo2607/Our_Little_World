@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { MemoryImage } from '@/components/ui/MemoryImage';
+import { batchResolveStorageUrls } from '@/lib/storage';
 import { validateImageFile, compressImage } from '@/lib/image';
 import { formatDateVietnamese } from '@/lib/utils';
 import { Memory } from '@/types';
@@ -22,7 +24,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function MemoriesPage() {
-  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memories, setMemories] = useState<(Memory & { signed_url?: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'card'>('grid');
 
@@ -36,7 +38,7 @@ export default function MemoriesPage() {
   const [uploading, setUploading] = useState(false);
 
   // Detail view modal
-  const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+  const [selectedMemory, setSelectedMemory] = useState<(Memory & { signed_url?: string }) | null>(null);
 
   const router = useRouter();
   const supabase = createClient();
@@ -70,19 +72,9 @@ export default function MemoriesPage() {
 
       if (error) throw error;
 
-      // Transform signed URLs if bucket is private
+      // Transform signed URLs in parallel if bucket is private
       if (data) {
-        const withUrls = await Promise.all(
-          data.map(async (m: Memory) => {
-            if (m.image_url.startsWith('couples/')) {
-              const { data: signed } = await supabase.storage
-                .from('couple-memories')
-                .createSignedUrl(m.image_url, 3600);
-              return { ...m, signed_url: signed?.signedUrl || m.image_url };
-            }
-            return { ...m, signed_url: m.image_url };
-          })
-        );
+        const withUrls = await batchResolveStorageUrls(supabase, data);
         setMemories(withUrls);
       }
     } catch (err) {
@@ -256,7 +248,7 @@ export default function MemoriesPage() {
           }}
           className="grid grid-cols-2 gap-3"
         >
-          {memories.map((mem) => (
+          {memories.map((mem, index) => (
             <motion.div
               key={mem.id}
               variants={{
@@ -268,12 +260,13 @@ export default function MemoriesPage() {
               onClick={() => setSelectedMemory(mem)}
               className="relative h-44 rounded-2xl overflow-hidden glass-card cursor-pointer group shadow-soft-sm hover:shadow-soft-lg transition-all"
             >
-              <img
+              <MemoryImage
                 src={mem.signed_url || mem.image_url}
                 alt={mem.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                priority={index < 2}
+                aspectRatio="h-full w-full"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white">
+              <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white">
                 <span className="text-[10px] text-rose-200">{formatDateVietnamese(mem.memory_date)}</span>
                 <h4 className="text-xs font-bold line-clamp-1">{mem.title}</h4>
               </div>
@@ -294,7 +287,7 @@ export default function MemoriesPage() {
           }}
           className="space-y-4"
         >
-          {memories.map((mem) => (
+          {memories.map((mem, index) => (
             <motion.div
               key={mem.id}
               variants={{
@@ -306,11 +299,12 @@ export default function MemoriesPage() {
                 onClick={() => setSelectedMemory(mem)}
                 className="cursor-pointer space-y-3 hover:border-rose-300 transition-colors"
               >
-                <div className="h-56 rounded-2xl overflow-hidden">
-                  <img
+                <div className="rounded-2xl overflow-hidden">
+                  <MemoryImage
                     src={mem.signed_url || mem.image_url}
                     alt={mem.title}
-                    className="w-full h-full object-cover"
+                    priority={index === 0}
+                    aspectRatio="aspect-[16/9]"
                   />
                 </div>
                 <div>
