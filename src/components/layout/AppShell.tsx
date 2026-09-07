@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/navigation/Sidebar';
 import { RightPanel } from '@/components/navigation/RightPanel';
 import { BottomNav } from '@/components/navigation/BottomNav';
 import { PageTransition } from '@/components/ui/PageTransition';
+import { FloatingSunflower } from '@/components/sunflower/FloatingSunflower';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,6 +37,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Desktop Right Info Panel (>= 1024px) */}
         <RightPanel />
       </div>
+
+      {/* Floating Sunflower Button (Fixed right above BottomNav) */}
+      <FloatingSunflower />
 
       {/* Mobile Bottom Navigation (< 1024px) */}
       <BottomNav />

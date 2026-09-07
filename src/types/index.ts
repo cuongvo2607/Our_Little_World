@@ -101,3 +101,35 @@ export interface GardenItem {
   unlocked_at: string;
   metadata?: Record<string, unknown>;
 }
+
+export type ActivityType = 'message' | 'mood' | 'memory' | 'quick_message';
+
+export interface DailyActivity {
+  id: string;
+  couple_id: string;
+  user_id: string;
+  activity_date: string; // YYYY-MM-DD (Asia/Ho_Chi_Minh timezone)
+  activity_type: ActivityType;
+  created_at: string;
+}
+
+export interface CoupleStreak {
+  id: string;
+  couple_id: string;
+  current_streak: number;
+  max_streak: number;
+  water_tokens: number;
+  last_calculated_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SunflowerStageLevel =
+  | 'start' // 0 days 🌱 Mới bắt đầu
+  | 'sprout' // 1-2 days 🌱 Nảy mầm
+  | 'growing' // 3-6 days 🌿 Lớn dần
+  | 'blooming' // 7-13 days 🌻 Nở hoa
+  | 'radiant' // 14-29 days 🌻✨ Rực rỡ
+  | 'multi_flowers' // 30-99 days 🌻🌻 Nhiều hoa hơn
+  | 'garden'; // 100+ days 🌻🌻👑 Vườn hướng dương
+

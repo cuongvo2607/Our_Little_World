@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { registerUserActivity } from '@/lib/activity';
 
 const MOOD_OPTIONS: { emoji: MoodEmoji; label: string }[] = [
   { emoji: '😭', label: 'Rất buồn' },
@@ -184,6 +185,9 @@ export default function HomePage() {
         message: label,
       });
 
+      // Register Sunflower Streak activity
+      await registerUserActivity('quick_message');
+
       showToast(`Đã gửi "${label}" tới người ấy ❤️`);
     } catch (err) {
       console.error(err);
@@ -213,6 +217,10 @@ export default function HomePage() {
         );
 
       if (error) throw error;
+
+      // Register Sunflower Streak activity
+      await registerUserActivity('mood');
+
       await refreshData();
       setIsMoodModalOpen(false);
       showToast('Đã cập nhật tâm trạng hôm nay!');

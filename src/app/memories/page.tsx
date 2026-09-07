@@ -22,6 +22,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { registerUserActivity } from '@/lib/activity';
 
 export default function MemoriesPage() {
   const [memories, setMemories] = useState<(Memory & { signed_url?: string })[]>([]);
@@ -145,6 +146,9 @@ export default function MemoriesPage() {
       });
 
       if (dbError) throw dbError;
+
+      // Register Sunflower Streak activity
+      await registerUserActivity('memory');
 
       // Reset form
       setTitle('');

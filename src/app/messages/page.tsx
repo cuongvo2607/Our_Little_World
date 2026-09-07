@@ -8,6 +8,7 @@ import { triggerHeartConfetti } from '@/lib/utils';
 import { LoveMessage } from '@/types';
 import { Send, Plus, Smile, ArrowDown, Heart, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { registerUserActivity } from '@/lib/activity';
 
 const EMOJI_PRESETS = ['❤️', '🥰', '🫶', '🫂', '😘', '🌸', '✨', '🥺'];
 
@@ -229,6 +230,9 @@ export default function MessagesPage() {
         .single();
 
       if (error) throw error;
+
+      // Register Sunflower Daily Activity
+      registerUserActivity(type === 'custom' ? 'message' : 'quick_message');
 
       if (data) {
         setMessages((prev) =>
