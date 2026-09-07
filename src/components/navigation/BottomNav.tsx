@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Home, MessageCircle, Plus, Image as ImageIcon, User, Heart, Sparkles, Clock, ListTodo, X } from 'lucide-react';
@@ -9,10 +9,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
-  // Hide nav on login, onboarding
-  if (['/login', '/onboarding'].includes(pathname)) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Hide nav on login, onboarding, or before hydration
+  if (!mounted || ['/login', '/onboarding'].includes(pathname)) {
     return null;
   }
 

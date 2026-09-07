@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -29,9 +29,14 @@ const sidebarItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
-  if (['/login', '/onboarding'].includes(pathname)) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || ['/login', '/onboarding'].includes(pathname)) {
     return null;
   }
 

@@ -103,10 +103,15 @@ function HomeSkeleton() {
 export default function HomePage() {
   const { user, userProfile, partnerProfile, couple, partnerMood, myMood, loading: contextLoading, refreshData } = useCouple();
 
+  const [mounted, setMounted] = useState(false);
   const [recentMemories, setRecentMemories] = useState<(Memory & { signed_url?: string })[]>([]);
   const [totalMemoriesCount, setTotalMemoriesCount] = useState<number>(0);
   const [upcomingCapsule, setUpcomingCapsule] = useState<TimeCapsule | null>(null);
   const [loadingExtra, setLoadingExtra] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Mood selector modal
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
@@ -236,8 +241,8 @@ export default function HomePage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Render Skeleton when Context is loading (prevents false 0 days, false empty states)
-  if (contextLoading) {
+  // Render Skeleton when unmounted or Context is loading
+  if (!mounted || contextLoading) {
     return <HomeSkeleton />;
   }
 
