@@ -14,6 +14,7 @@ export function FloatingSunflower() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isMissedModalOpen, setIsMissedModalOpen] = useState(false);
+  const isDraggingRef = React.useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -30,15 +31,13 @@ export function FloatingSunflower() {
     loading,
   } = useSunflowerStreak();
 
+  const streakCount = streakData?.current_streak || 0;
+  const isMilestone = [7, 14, 30, 50, 100, 365].includes(streakCount) && isTodayCompleted;
+
   // Hide floating sunflower until mounted or on login/onboarding
   if (!mounted || ['/login', '/onboarding'].includes(pathname)) {
     return null;
   }
-
-  const streakCount = streakData?.current_streak || 0;
-  const isMilestone = [7, 14, 30, 50, 100, 365].includes(streakCount) && isTodayCompleted;
-
-  const isDraggingRef = React.useRef(false);
 
   return (
     <>
