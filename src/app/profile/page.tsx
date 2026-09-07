@@ -97,21 +97,44 @@ export default function ProfilePage() {
       const compressedBlob = await compressImage(file, 600, 0.85);
       const fileExt = file.name.split('.').pop() || 'webp';
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
+      
+      let targetBucket = 'avatars';
+      let filePath = `${user.id}/${fileName}`;
 
-      // 2. Upload to Supabase Storage bucket 'avatars'
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
+      // 2. Attempt upload to Supabase Storage bucket 'avatars'
+      let { error: uploadError } = await supabase.storage
+        .from(targetBucket)
         .upload(filePath, compressedBlob, {
           contentType: 'image/webp',
           upsert: true,
         });
 
+      // Fallback: If 'avatars' bucket is not created in Supabase Storage, fallback to 'couple-memories' bucket
+      if (
+        uploadError &&
+        (uploadError.message?.toLowerCase().includes('bucket not found') ||
+          (uploadError as any).statusCode === '404' ||
+          (uploadError as any).status === 400)
+      ) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[Avatar Upload] Bucket avatars not found, falling back to couple-memories bucket');
+        }
+        targetBucket = 'couple-memories';
+        filePath = `avatars/${user.id}/${fileName}`;
+        const fallbackRes = await supabase.storage
+          .from(targetBucket)
+          .upload(filePath, compressedBlob, {
+            contentType: 'image/webp',
+            upsert: true,
+          });
+        uploadError = fallbackRes.error;
+      }
+
       if (uploadError) throw uploadError;
 
-      // 3. Get Public URL
+      // 3. Get Public URL from successful bucket
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
+        .from(targetBucket)
         .getPublicUrl(filePath);
 
       // 4. Update profiles table for current user only
