@@ -296,7 +296,8 @@ export function useSunflowerStreak() {
   useEffect(() => {
     if (!couple?.id) return;
 
-    const channelName = `sunflower-realtime-${couple.id}`;
+    // Unique channel topic per hook instance to prevent channel object collisions in Supabase client cache
+    const channelName = `sunflower-realtime-${couple.id}-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
       .channel(channelName)
       .on(

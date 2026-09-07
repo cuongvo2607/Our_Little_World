@@ -88,9 +88,9 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
         // 3. Fetch Couple details, Couple Members + Profiles, and Today's Moods in parallel
         const todayStr = new Date().toISOString().split('T')[0];
 
-        const [coupleRes, membersRes, moodsRes] = await Promise.all([
+        const [coupleRes, memberRowsRes, moodsRes] = await Promise.all([
           supabase.from('couples').select('*').eq('id', coupleId).single(),
-          supabase.from('couple_members').select('user_id, profiles(*)').eq('couple_id', coupleId),
+          supabase.from('couple_members').select('user_id').eq('couple_id', coupleId),
           supabase.from('moods').select('*').eq('couple_id', coupleId).eq('mood_date', todayStr),
         ]);
 
@@ -98,15 +98,21 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
           setCouple(coupleRes.data);
         }
 
-        if (membersRes.data) {
+        if (memberRowsRes.data && memberRowsRes.data.length > 0) {
+          const memberUserIds = memberRowsRes.data.map((m: any) => m.user_id);
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', memberUserIds);
+
           let foundUserProf: Profile | null = null;
           let foundPartnerProf: Profile | null = null;
 
-          membersRes.data.forEach((m: any) => {
-            if (m.user_id === currentUser.id) {
-              foundUserProf = m.profiles;
+          (profilesData || []).forEach((p: Profile) => {
+            if (p.id === currentUser.id) {
+              foundUserProf = p;
             } else {
-              foundPartnerProf = m.profiles;
+              foundPartnerProf = p;
             }
           });
 
@@ -174,7 +180,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!couple?.id) return;
 
-    const channelName = `couple-context-realtime-${couple.id}`;
+    const channelName = `couple-context-realtime-${couple.id}-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
       .channel(channelName)
       .on(
