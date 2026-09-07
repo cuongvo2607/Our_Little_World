@@ -38,7 +38,15 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.user) {
-          router.push('/onboarding');
+          if (data.session) {
+            // User logged in immediately (Confirm email is OFF)
+            router.push('/onboarding');
+          } else {
+            // Confirmation email sent (Confirm email is ON)
+            setErrorMsg(
+              'Đăng ký thành công! Vui lòng kiểm tra hộp thư email để xác nhận tài khoản. (Mẹo: Nếu muốn đăng ký ngay không cần email, hãy vào Supabase Dashboard -> Authentication -> Providers -> Email -> tắt "Confirm email").'
+            );
+          }
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -52,7 +60,13 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Auth Error:', err);
 
-      if (err?.message === 'Failed to fetch' || err?.toString()?.includes('Failed to fetch')) {
+      const errStr = err?.message || err?.toString() || '';
+
+      if (errStr.toLowerCase().includes('rate limit') || errStr.toLowerCase().includes('email rate limit')) {
+        setErrorMsg(
+          '⚠️ Lỗi Email Rate Limit Exceeded: Supabase miễn phí giới hạn số lượng email gửi thử nghiệm mỗi giờ. HƯỚNG DẪN SỬA NGAY: Vào Supabase Dashboard -> Authentication -> Providers -> Email -> Tắt "Confirm email" -> Bấm Save. Sau đó bạn có thể Đăng ký ngay mà không bị giới hạn!'
+        );
+      } else if (errStr.includes('Failed to fetch')) {
         setErrorMsg(
           'Không thể kết nối đến máy chủ Supabase. Vui lòng kiểm tra lại NEXT_PUBLIC_SUPABASE_URL trên Vercel và bấm Redeploy lại dự án.'
         );
@@ -111,7 +125,7 @@ export default function LoginPage() {
           </div>
 
           {errorMsg && (
-            <div className="p-3 text-xs bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300 rounded-2xl border border-red-200/50 leading-relaxed">
+            <div className="p-3.5 text-xs bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300 rounded-2xl border border-red-200/50 leading-relaxed font-medium">
               {errorMsg}
             </div>
           )}
