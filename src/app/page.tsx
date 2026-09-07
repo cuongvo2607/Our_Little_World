@@ -11,6 +11,7 @@ import {
   calculateLoveDuration,
   getDaysTogether,
   formatDateVietnamese,
+  formatRelativeTime,
   triggerHeartConfetti,
 } from '@/lib/utils';
 import {
@@ -30,7 +31,6 @@ import {
   Smile,
   Bell,
   MapPin,
-  Compass,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -48,7 +48,9 @@ export default function HomePage() {
   const { user, userProfile, partnerProfile, couple, partnerMood, myMood, loading: contextLoading, refreshData } = useCouple();
 
   const [recentMemories, setRecentMemories] = useState<Memory[]>([]);
+  const [totalMemoriesCount, setTotalMemoriesCount] = useState<number>(0);
   const [upcomingCapsule, setUpcomingCapsule] = useState<TimeCapsule | null>(null);
+  const [loadingExtra, setLoadingExtra] = useState(true);
 
   // Mood selector modal
   const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
@@ -70,14 +72,23 @@ export default function HomePage() {
   }, [couple?.id]);
 
   const fetchExtraDashboardData = async (coupleId: string) => {
+    setLoadingExtra(true);
     try {
-      // Fetch Recent Memories (up to 4 for carousel)
+      // Fetch total count of memories
+      const { count } = await supabase
+        .from('memories')
+        .select('*', { count: 'exact', head: true })
+        .eq('couple_id', coupleId);
+
+      setTotalMemoriesCount(count || 0);
+
+      // Fetch Recent Memories (up to 5 for carousel)
       const { data: memoryData } = await supabase
         .from('memories')
         .select('*')
         .eq('couple_id', coupleId)
         .order('created_at', { ascending: false })
-        .limit(4);
+        .limit(5);
 
       setRecentMemories(memoryData || []);
 
@@ -94,6 +105,8 @@ export default function HomePage() {
       setUpcomingCapsule(capsuleData);
     } catch (err) {
       console.error('Error loading extra dashboard data:', err);
+    } finally {
+      setLoadingExtra(false);
     }
   };
 
@@ -172,12 +185,16 @@ export default function HomePage() {
     couple?.name ||
     `${userProfile?.display_name || 'Cường'} & ${partnerProfile?.display_name || 'Trinh'}`;
 
+  // Dynamic Relative Timestamps for Moods (Không dùng thời gian cố định!)
+  const myMoodTimeStr = formatRelativeTime(myMood?.created_at);
+  const partnerMoodTimeStr = formatRelativeTime(partnerMood?.created_at);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="max-w-[760px] mx-auto space-y-4 py-2 px-3 sm:px-4"
+      className="max-w-[760px] mx-auto space-y-4 py-2 px-3 sm:px-4 pb-28 sm:pb-32"
     >
       {/* Toast Notification */}
       <AnimatePresence>
@@ -230,7 +247,7 @@ export default function HomePage() {
               )}
             </motion.div>
 
-            {/* Partner Avatar with Online Dot */}
+            {/* Partner Avatar with Online Green Dot */}
             <motion.div
               whileHover={{ scale: 1.05 }}
               className="relative w-[46px] h-[46px] rounded-full border-2 border-white dark:border-charcoal-800 bg-lavender-200 overflow-hidden flex items-center justify-center font-bold text-purple-600 shadow-soft-sm z-20 shrink-0"
@@ -241,7 +258,7 @@ export default function HomePage() {
                 partnerProfile?.display_name?.charAt(0).toUpperCase() || 'T'
               )}
               {/* Online Green Dot */}
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white dark:border-charcoal-800" />
+              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white dark:border-charcoal-800" />
             </motion.div>
           </div>
 
@@ -251,7 +268,7 @@ export default function HomePage() {
             </h2>
             <p className="text-[11.5px] text-[#81727B] dark:text-gray-400 flex items-center gap-1 mt-0.5">
               <span>{partnerProfile ? `Cùng với ${partnerProfile.display_name}` : 'Đang chờ người ấy kết nối...'}</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </p>
             <p className="text-[11px] text-[#E86D91] italic font-medium">
               Mãi là của nhau ♡
@@ -262,11 +279,11 @@ export default function HomePage() {
 
       {/* 2. LOVE COUNTER (HERO SECTION) */}
       <div className="bg-gradient-to-br from-[#FFF5F8] via-[#FFF0F3] to-[#FFF8F5] dark:from-charcoal-800/90 dark:via-rose-950/40 dark:to-charcoal-900/90 rounded-[26px] p-5 sm:p-6 text-center relative overflow-hidden border border-[rgba(232,109,145,0.18)] shadow-[0_8px_30px_rgba(232,109,145,0.08)]">
-        {/* Soft Background Accent Floating Hearts */}
-        <div className="absolute right-3 top-3 text-rose-200/50 text-xl pointer-events-none">
+        {/* Soft Decorative Hearts */}
+        <div className="absolute right-3 top-3 text-rose-200/60 text-xl pointer-events-none">
           ♡
         </div>
-        <div className="absolute right-6 bottom-3 text-rose-200/40 text-xs italic font-serif pointer-events-none hidden sm:block">
+        <div className="absolute right-5 bottom-3 text-rose-300/80 text-xs italic font-serif pointer-events-none hidden sm:block">
           Cùng nhau đi tiếp nhé ♡
         </div>
 
@@ -279,7 +296,7 @@ export default function HomePage() {
           <motion.div
             animate={{ scale: [1, 1.08, 1] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 to-[#E86D91] flex items-center justify-center text-white text-3xl shadow-lg shadow-rose-300/40 shrink-0"
+            className="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 via-[#E86D91] to-rose-500 flex items-center justify-center text-white text-3xl shadow-lg shadow-rose-300/40 shrink-0"
           >
             ❤️
           </motion.div>
@@ -334,7 +351,10 @@ export default function HomePage() {
                   {myMood ? MOOD_OPTIONS.find((m) => m.emoji === myMood.mood)?.label : 'Vui vẻ'}
                 </span>
               </div>
-              <p className="text-[10px] text-[#E86D91] mt-0.5">2 phút trước</p>
+              {/* Dynamic Timestamp */}
+              <p className="text-[10px] text-[#E86D91] font-medium mt-0.5 truncate">
+                {myMoodTimeStr}
+              </p>
             </div>
           </motion.div>
 
@@ -358,7 +378,10 @@ export default function HomePage() {
                   {partnerMood ? MOOD_OPTIONS.find((m) => m.emoji === partnerMood.mood)?.label : 'Yêu đời'}
                 </span>
               </div>
-              <p className="text-[10px] text-[#E86D91] mt-0.5">5 phút trước</p>
+              {/* Dynamic Timestamp */}
+              <p className="text-[10px] text-[#E86D91] font-medium mt-0.5 truncate">
+                {partnerMoodTimeStr}
+              </p>
             </div>
           </motion.div>
         </div>
@@ -426,44 +449,52 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {recentMemories.length > 0 ? (
+        {loadingExtra ? (
+          /* Skeleton Loading for Memories */
+          <div className="aspect-[16/9] rounded-[22px] bg-rose-100/60 dark:bg-rose-950/40 animate-pulse flex items-center justify-center text-xs text-[#81727B]">
+            Đang tải khoảnh khắc đẹp...
+          </div>
+        ) : recentMemories.length > 0 ? (
           <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none">
             {recentMemories.map((mem, index) => (
               <Link
                 key={mem.id}
                 href="/memories"
-                className="block group snap-start shrink-0 w-[88%] sm:w-[75%]"
+                className="block group snap-start shrink-0 w-[90%] sm:w-[80%]"
               >
-                <div className="relative aspect-[16/10] rounded-[20px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)]">
+                <div className="relative aspect-[16/9] rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-charcoal-900">
                   <img
                     src={mem.image_url}
                     alt={mem.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex flex-col justify-end p-4 text-white">
-                    <h4 className="text-sm font-bold text-white line-clamp-1">{mem.title}</h4>
-                    <p className="text-[11px] text-gray-300 font-medium flex items-center gap-1 mt-0.5">
+
+                  {/* Top-Right Image Counter Pill */}
+                  <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full border border-white/20">
+                    {index + 1}/{totalMemoriesCount || recentMemories.length}
+                  </div>
+
+                  {/* Bottom Gradient Overlay & Caption */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex flex-col justify-end p-4 text-white">
+                    <h4 className="text-sm sm:text-base font-bold text-white line-clamp-1">{mem.title}</h4>
+                    <p className="text-[11px] text-rose-200 font-medium flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3 text-rose-300" /> {formatDateVietnamese(mem.memory_date)}
                     </p>
                   </div>
-                  {index === 0 && recentMemories.length > 1 && (
-                    <div className="absolute bottom-3 right-3 bg-black/40 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-white/20">
-                      <Heart className="w-3 h-3 fill-rose-400 text-rose-400" /> +{recentMemories.length}
-                    </div>
-                  )}
                 </div>
               </Link>
             ))}
           </div>
         ) : (
           <Link href="/memories" className="block group">
-            <div className="relative aspect-[16/10] rounded-[20px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-gradient-to-br from-rose-100 to-pink-100 dark:from-charcoal-800 dark:to-rose-950 flex flex-col items-center justify-center p-4 text-center">
+            <div className="relative aspect-[16/9] rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-gradient-to-br from-rose-100/90 to-pink-100/90 dark:from-charcoal-800 dark:to-rose-950 flex flex-col items-center justify-center p-4 text-center">
               <div className="w-12 h-12 rounded-full bg-white/80 dark:bg-charcoal-700 flex items-center justify-center text-rose-400 mb-2 shadow-soft-sm">
                 <ImageIcon className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-bold text-charcoal-800 dark:text-cream-50">Hoàng hôn ở Vũng Tàu</h4>
               <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-1">
-                <MapPin className="w-3 h-3 text-rose-400" /> 12/09/2025
+                <MapPin className="w-3 h-3 text-rose-400" /> 07/09/2026
               </p>
             </div>
           </Link>

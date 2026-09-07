@@ -118,3 +118,27 @@ export function triggerHeartConfetti() {
     scalar: 1.2,
   });
 }
+
+export function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Chưa cập nhật';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    if (isNaN(diffMs)) return 'Chưa cập nhật';
+
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    if (diffDays === 1) return 'Hôm qua';
+    if (diffDays < 7) return `${diffDays} ngày trước`;
+    return format(d, 'dd/MM/yyyy');
+  } catch {
+    return 'Chưa cập nhật';
+  }
+}
+
