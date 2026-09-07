@@ -120,7 +120,8 @@ export default function ProfilePage() {
           console.warn('[Avatar Upload] Bucket avatars not found, falling back to couple-memories bucket');
         }
         targetBucket = 'couple-memories';
-        filePath = `avatars/${user.id}/${fileName}`;
+        const coupleFolder = couple?.id ? `couples/${couple.id}` : `couples/${user.id}`;
+        filePath = `${coupleFolder}/avatar-${Date.now()}.${fileExt}`;
         const fallbackRes = await supabase.storage
           .from(targetBucket)
           .upload(filePath, compressedBlob, {
