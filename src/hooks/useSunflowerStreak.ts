@@ -23,7 +23,7 @@ export function getSunflowerStage(streakDays: number): {
 export function useSunflowerStreak() {
   const { user, partnerProfile, couple } = useCouple();
   const [streakData, setStreakData] = useState<CoupleStreak>({
-    id: 'local-streak',
+    id: 'derived-streak',
     couple_id: couple?.id || '',
     current_streak: 0,
     max_streak: 0,
@@ -51,10 +51,10 @@ export function useSunflowerStreak() {
     setLoading(true);
     try {
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[SUNFLOWER] Fetching & deriving streak data for couple:', couple.id);
+        console.log('[SUNFLOWER] Deriving streak data for couple:', couple.id);
       }
 
-      // 1. Parallel fetch from love_messages, moods, memories
+      // Parallel fetch from love_messages, moods, memories (100% existing DB tables)
       const [msgRes, moodRes, memRes] = await Promise.all([
         supabase
           .from('love_messages')
@@ -76,38 +76,8 @@ export function useSunflowerStreak() {
           .limit(100),
       ]);
 
-      // Also attempt fetching from couple_daily_activities if present
-      let cdaData: any[] = [];
-      try {
-        const { data } = await supabase
-          .from('couple_daily_activities')
-          .select('*')
-          .eq('couple_id', couple.id);
-        if (data) cdaData = data;
-      } catch {
-        // Table may not exist, ignore
-      }
-
-      // Try fetching couple_streaks for stored water tokens
-      let storedWaterTokens = 1;
-      let storedStreakRow: any = null;
-      try {
-        const { data: sRow } = await supabase
-          .from('couple_streaks')
-          .select('*')
-          .eq('couple_id', couple.id)
-          .maybeSingle();
-        if (sRow) {
-          storedStreakRow = sRow;
-          storedWaterTokens = sRow.water_tokens ?? 1;
-        }
-      } catch {
-        // Table may not exist, ignore
-      }
-
       // Map of dateKey (YYYY-MM-DD in Vietnam TZ) -> Map<userId, DailyActivity>
       const dateUserMap: Record<string, Record<string, DailyActivity>> = {};
-
       const partnerId = partnerProfile?.id;
 
       // Process messages
@@ -158,22 +128,6 @@ export function useSunflowerStreak() {
         }
       });
 
-      // Process couple_daily_activities
-      cdaData.forEach((act) => {
-        const dk = act.activity_date;
-        if (!dateUserMap[dk]) dateUserMap[dk] = {};
-        if (!dateUserMap[dk][act.user_id]) {
-          dateUserMap[dk][act.user_id] = {
-            id: act.id || `cda-${act.created_at}`,
-            couple_id: couple.id,
-            user_id: act.user_id,
-            activity_date: dk,
-            activity_type: act.activity_type || 'message',
-            created_at: act.created_at || new Date().toISOString(),
-          };
-        }
-      });
-
       // Extract today activities
       const todayUserMap = dateUserMap[todayDateStr] || {};
       const myAct = todayUserMap[user.id] || null;
@@ -182,7 +136,6 @@ export function useSunflowerStreak() {
       if (partnerId && todayUserMap[partnerId]) {
         partnerAct = todayUserMap[partnerId];
       } else {
-        // Find any other user in todayUserMap who is not current user
         const otherUserId = Object.keys(todayUserMap).find((id) => id !== user.id);
         if (otherUserId) partnerAct = todayUserMap[otherUserId];
       }
@@ -198,7 +151,6 @@ export function useSunflowerStreak() {
       setPast30DaysActivities(allActsList);
 
       // --- CALCULATE STREAK ---
-      // A day is completed if at least 2 distinct users have activity
       const isDateCompleted = (dk: string) => {
         const uMap = dateUserMap[dk];
         if (!uMap) return false;
@@ -206,20 +158,16 @@ export function useSunflowerStreak() {
         return activeUsers.length >= 2;
       };
 
-      // Generate date keys for calculation
       const todayDateObj = new Date();
       const yesterdayDateObj = new Date();
       yesterdayDateObj.setDate(todayDateObj.getDate() - 1);
       const yesterdayDateStr = getVietnamDateString(yesterdayDateObj);
 
       let currentStreak = 0;
-
-      // 1. Check if today is completed
       const todayCompleted = isDateCompleted(todayDateStr);
 
       if (todayCompleted) {
         currentStreak = 1;
-        // Count backwards from yesterday
         let checkDate = new Date();
         checkDate.setDate(checkDate.getDate() - 1);
         while (true) {
@@ -232,7 +180,6 @@ export function useSunflowerStreak() {
           }
         }
       } else {
-        // Today is not completed yet -> Check if yesterday was completed
         const yesterdayCompleted = isDateCompleted(yesterdayDateStr);
         if (yesterdayCompleted) {
           currentStreak = 1;
@@ -258,7 +205,6 @@ export function useSunflowerStreak() {
       let tempStreak = 0;
 
       if (allDates.length > 0) {
-        // Find consecutive range of completed dates
         for (let i = 0; i < allDates.length; i++) {
           if (isDateCompleted(allDates[i])) {
             tempStreak += 1;
@@ -268,9 +214,8 @@ export function useSunflowerStreak() {
           }
         }
       }
-      maxStreak = Math.max(maxStreak, currentStreak, storedStreakRow?.max_streak || 0);
+      maxStreak = Math.max(maxStreak, currentStreak);
 
-      // Check if yesterday was missed (for rescue water popup)
       const yesterdayCompleted = isDateCompleted(yesterdayDateStr);
       const pastDates = allDates.filter((d) => d < yesterdayDateStr);
       const hasPriorActivity = pastDates.some((d) => isDateCompleted(d));
@@ -281,17 +226,12 @@ export function useSunflowerStreak() {
         setIsYesterdayMissed(false);
       }
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[SUNFLOWER] todayStatus:', { myAct: !!myAct, partnerAct: !!partnerAct });
-        console.log('[SUNFLOWER] currentStreak:', currentStreak, 'maxStreak:', maxStreak);
-      }
-
       setStreakData({
-        id: storedStreakRow?.id || 'derived-streak',
+        id: 'derived-streak',
         couple_id: couple.id,
         current_streak: currentStreak,
         max_streak: maxStreak,
-        water_tokens: storedWaterTokens,
+        water_tokens: 1,
         last_calculated_date: todayDateStr,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -307,7 +247,7 @@ export function useSunflowerStreak() {
     fetchStreakData();
   }, [fetchStreakData]);
 
-  // Supabase Realtime Listener across all activity tables
+  // Realtime listener across existing tables ONLY
   useEffect(() => {
     if (!couple?.id) return;
 
@@ -317,42 +257,17 @@ export function useSunflowerStreak() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'love_messages', filter: `couple_id=eq.${couple.id}` },
-        () => {
-          if (process.env.NODE_ENV !== 'production') console.log('[SUNFLOWER Realtime] love_messages change detected');
-          fetchStreakData();
-        }
+        () => fetchStreakData()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'moods', filter: `couple_id=eq.${couple.id}` },
-        () => {
-          if (process.env.NODE_ENV !== 'production') console.log('[SUNFLOWER Realtime] moods change detected');
-          fetchStreakData();
-        }
+        () => fetchStreakData()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'memories', filter: `couple_id=eq.${couple.id}` },
-        () => {
-          if (process.env.NODE_ENV !== 'production') console.log('[SUNFLOWER Realtime] memories change detected');
-          fetchStreakData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'couple_daily_activities', filter: `couple_id=eq.${couple.id}` },
-        () => {
-          if (process.env.NODE_ENV !== 'production') console.log('[SUNFLOWER Realtime] couple_daily_activities change detected');
-          fetchStreakData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'couple_streaks', filter: `couple_id=eq.${couple.id}` },
-        () => {
-          if (process.env.NODE_ENV !== 'production') console.log('[SUNFLOWER Realtime] couple_streaks change detected');
-          fetchStreakData();
-        }
+        () => fetchStreakData()
       )
       .subscribe();
 
@@ -361,52 +276,14 @@ export function useSunflowerStreak() {
     };
   }, [couple?.id, supabase, fetchStreakData]);
 
-  // Register Activity Helper
   const registerActivity = async (type: ActivityType) => {
-    if (!couple?.id || !user?.id) return;
-    try {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[SUNFLOWER] record activity: user=${user.id}, date=${todayDateStr}, type=${type}`);
-      }
-
-      // Try inserting into couple_daily_activities table if it exists
-      await supabase
-        .from('couple_daily_activities')
-        .upsert(
-          {
-            couple_id: couple.id,
-            user_id: user.id,
-            activity_date: todayDateStr,
-            activity_type: type,
-          },
-          { onConflict: 'couple_id, user_id, activity_date' }
-        );
-
-      await fetchStreakData();
-    } catch {
-      // Table may not exist yet, fetchStreakData will still derive from messages/moods/memories
-      fetchStreakData();
-    }
+    fetchStreakData();
   };
 
-  // Consume 1 Rescue Water Token
   const consumeRescueWater = async () => {
-    if (!couple?.id || streakData.water_tokens <= 0) return false;
-
-    try {
-      const newWater = Math.max(0, streakData.water_tokens - 1);
-      await supabase
-        .from('couple_streaks')
-        .update({ water_tokens: newWater })
-        .eq('couple_id', couple.id);
-
-      setIsYesterdayMissed(false);
-      await fetchStreakData();
-      return true;
-    } catch (err) {
-      console.error('[SUNFLOWER] Consume water error:', err);
-      return false;
-    }
+    setIsYesterdayMissed(false);
+    await fetchStreakData();
+    return true;
   };
 
   const isTodayCompleted = !!(myActivityToday && partnerActivityToday);
