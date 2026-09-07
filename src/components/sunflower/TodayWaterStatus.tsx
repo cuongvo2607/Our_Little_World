@@ -21,6 +21,9 @@ export function TodayWaterStatus({ myActivity, partnerActivity, onCloseSheet }: 
   const isPartnerDone = !!partnerActivity;
   const isBothDone = isMyDone && isPartnerDone;
 
+  const myInitial = (userProfile?.display_name?.[0] || 'C').toUpperCase();
+  const partnerInitial = (partnerProfile?.display_name?.[0] || 'T').toUpperCase();
+
   return (
     <div className="bg-[#FFFDF7] dark:bg-charcoal-800/80 rounded-[24px] p-4 border border-amber-100 dark:border-amber-900/30 shadow-soft-sm space-y-3">
       <div className="flex items-center justify-between border-b border-amber-100/60 dark:border-amber-900/20 pb-2">
@@ -39,7 +42,7 @@ export function TodayWaterStatus({ myActivity, partnerActivity, onCloseSheet }: 
             {userProfile?.avatar_url ? (
               <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
             ) : (
-              userProfile?.display_name?.charAt(0).toUpperCase() || 'Bạn'
+              myInitial
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -64,7 +67,7 @@ export function TodayWaterStatus({ myActivity, partnerActivity, onCloseSheet }: 
             {partnerProfile?.avatar_url ? (
               <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
             ) : (
-              partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'
+              partnerInitial
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -103,9 +106,10 @@ export function TodayWaterStatus({ myActivity, partnerActivity, onCloseSheet }: 
               if (onCloseSheet) onCloseSheet();
               router.push('/messages');
             }}
-            className="w-full py-2.5 px-4 bg-gradient-to-r from-rose-400 to-[#EC6F91] text-white text-xs font-bold rounded-2xl shadow-soft-sm flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            className="w-full py-2.5 px-4 bg-gradient-to-r from-rose-400 to-[#EC6F91] text-white text-xs font-bold rounded-2xl shadow-soft-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
           >
-            <MessageCircle className="w-4 h-4" /> Đi nhắn tin ngay 💌
+            <MessageCircle className="w-4 h-4 fill-white" />
+            <span>Đi nhắn tin ngay 💌</span>
           </motion.button>
         </div>
       )}

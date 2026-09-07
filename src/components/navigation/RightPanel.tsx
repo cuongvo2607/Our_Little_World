@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCouple } from '@/context/CoupleContext';
 import { usePathname } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
@@ -11,25 +11,32 @@ import { SunflowerSheet } from '@/components/sunflower/SunflowerSheet';
 
 export function RightPanel() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
   const { userProfile, partnerProfile, couple, partnerMood } = useCouple();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const {
     streakData,
     myActivityToday,
     partnerActivityToday,
     past30DaysActivities,
-    isTodayCompleted,
     stage,
     loading: streakLoading,
   } = useSunflowerStreak();
 
-  if (['/login', '/onboarding'].includes(pathname)) {
+  if (!mounted || ['/login', '/onboarding'].includes(pathname)) {
     return null;
   }
 
   const daysTogether = getDaysTogether(couple?.start_date);
-  const streakCount = streakData.current_streak || 0;
+  const streakCount = streakData?.current_streak || 0;
+
+  const myInitial = (userProfile?.display_name?.[0] || 'U').toUpperCase();
+  const partnerInitial = (partnerProfile?.display_name?.[0] || 'P').toUpperCase();
 
   return (
     <>
@@ -41,7 +48,7 @@ export function RightPanel() {
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                userProfile?.display_name?.charAt(0).toUpperCase() || 'U'
+                myInitial
               )}
             </div>
             <div className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center z-10 text-xs shadow-soft-sm">
@@ -51,7 +58,7 @@ export function RightPanel() {
               {partnerProfile?.avatar_url ? (
                 <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
               ) : (
-                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'
+                partnerInitial
               )}
             </div>
           </div>
@@ -61,7 +68,7 @@ export function RightPanel() {
               {couple?.name || 'Thế Giới Của Hai Ta'}
             </h2>
             <p className="text-xs text-rose-500 font-semibold mt-0.5">
-              {userProfile?.display_name} & {partnerProfile?.display_name || 'Người ấy'}
+              {userProfile?.display_name || 'Bạn'} & {partnerProfile?.display_name || 'Người ấy'}
             </p>
           </div>
 
@@ -85,13 +92,13 @@ export function RightPanel() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">{stage.emoji}</span>
+              <span className="text-2xl">{stage?.emoji || '🌱'}</span>
               <div>
                 <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200">
                   Chuỗi Hướng Dương 🌻
                 </h3>
                 <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium">
-                  {stage.title}
+                  {stage?.title || 'Mới bắt đầu'}
                 </p>
               </div>
             </div>

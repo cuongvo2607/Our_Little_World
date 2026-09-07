@@ -308,7 +308,7 @@ export default function HomePage() {
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                userProfile?.display_name?.charAt(0).toUpperCase() || 'C'
+                (userProfile?.display_name?.[0] || 'C').toUpperCase()
               )}
             </motion.div>
 
@@ -320,7 +320,7 @@ export default function HomePage() {
               {partnerProfile?.avatar_url ? (
                 <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
               ) : (
-                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'T'
+                (partnerProfile?.display_name?.[0] || 'T').toUpperCase()
               )}
               {/* Online Green Dot */}
               <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white dark:border-charcoal-800" />
@@ -423,7 +423,7 @@ export default function HomePage() {
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                userProfile?.display_name?.charAt(0).toUpperCase() || 'C'
+                (userProfile?.display_name?.[0] || 'C').toUpperCase()
               )}
             </div>
             <div className="min-w-0 flex-1">
@@ -450,7 +450,7 @@ export default function HomePage() {
               {partnerProfile?.avatar_url ? (
                 <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
               ) : (
-                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'T'
+                (partnerProfile?.display_name?.[0] || 'T').toUpperCase()
               )}
             </div>
             <div className="min-w-0 flex-1">

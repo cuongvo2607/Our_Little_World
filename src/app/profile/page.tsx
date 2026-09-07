@@ -210,7 +210,7 @@ export default function ProfilePage() {
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                userProfile?.display_name?.charAt(0).toUpperCase() || 'U'
+                (userProfile?.display_name?.[0] || 'U').toUpperCase()
               )}
             </div>
 
@@ -232,7 +232,7 @@ export default function ProfilePage() {
             {partnerProfile?.avatar_url ? (
               <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
             ) : (
-              partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'
+              (partnerProfile?.display_name?.[0] || 'P').toUpperCase()
             )}
           </div>
         </div>

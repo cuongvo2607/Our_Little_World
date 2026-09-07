@@ -257,7 +257,7 @@ export default function MessagesPage() {
               <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
             ) : (
               <span className="flex items-center justify-center h-full font-bold text-xs text-purple-600">
-                {partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'}
+                {(partnerProfile?.display_name?.[0] || 'P').toUpperCase()}
               </span>
             )}
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white dark:border-charcoal-800" />
@@ -326,7 +326,7 @@ export default function MessagesPage() {
                         <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
                       ) : (
                         <span className="flex items-center justify-center h-full text-[10px] font-bold text-purple-600">
-                          {partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'}
+                          {(partnerProfile?.display_name?.[0] || 'P').toUpperCase()}
                         </span>
                       )}
                     </div>
@@ -361,7 +361,7 @@ export default function MessagesPage() {
                         <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
                       ) : (
                         <span className="flex items-center justify-center h-full text-[10px] font-bold text-rose-600">
-                          {userProfile?.display_name?.charAt(0).toUpperCase() || 'U'}
+                          {(userProfile?.display_name?.[0] || 'U').toUpperCase()}
                         </span>
                       )}
                     </div>

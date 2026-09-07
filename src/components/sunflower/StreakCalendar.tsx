@@ -5,23 +5,24 @@ import { DailyActivity } from '@/types';
 import { getVietnamDateString } from '@/lib/utils';
 
 interface StreakCalendarProps {
-  pastActivities: DailyActivity[];
+  pastActivities?: DailyActivity[];
 }
 
-export function StreakCalendar({ pastActivities }: StreakCalendarProps) {
+export function StreakCalendar({ pastActivities = [] }: StreakCalendarProps) {
   const todayStr = getVietnamDateString();
 
   // Generate last 28 days array (4 full weeks)
   const generateCalendarDays = () => {
     const days: { dateStr: string; status: 'completed' | 'single' | 'missed'; isToday: boolean }[] = [];
     const today = new Date();
+    const safeActs = pastActivities || [];
 
     for (let i = 27; i >= 0; i--) {
       const d = new Date();
       d.setDate(today.getDate() - i);
       const dateStr = getVietnamDateString(d);
 
-      const dayActs = pastActivities.filter((a) => a.activity_date === dateStr);
+      const dayActs = safeActs.filter((a) => a && a.activity_date === dateStr);
       const uniqueUsers = new Set(dayActs.map((a) => a.user_id));
 
       let status: 'completed' | 'single' | 'missed' = 'missed';
