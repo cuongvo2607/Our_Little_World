@@ -91,7 +91,7 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
         const [coupleRes, memberRowsRes, moodsRes] = await Promise.all([
           supabase.from('couples').select('*').eq('id', coupleId).single(),
           supabase.from('couple_members').select('user_id').eq('couple_id', coupleId),
-          supabase.from('moods').select('*').eq('couple_id', coupleId).eq('mood_date', todayStr),
+          supabase.from('moods').select('*').eq('couple_id', coupleId).eq('mood_date', todayStr).order('created_at', { ascending: false }),
         ]);
 
         if (coupleRes.data) {

@@ -122,10 +122,19 @@ export function triggerHeartConfetti() {
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return 'Chưa cập nhật';
   try {
-    const d = new Date(dateStr);
+    let str = dateStr.trim();
+    // If timestamp string from DB doesn't specify timezone offset (e.g. 2026-09-07 14:30:00), append 'Z' to force UTC parsing
+    if (!str.endsWith('Z') && !str.includes('+') && !str.match(/-\d{2}:\d{2}$/)) {
+      str = str.replace(' ', 'T') + 'Z';
+    }
+
+    const d = new Date(str);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     if (isNaN(diffMs)) return 'Chưa cập nhật';
+
+    // Handle future or minor clock skew
+    if (diffMs < 0) return 'Vừa xong';
 
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMins / 60);

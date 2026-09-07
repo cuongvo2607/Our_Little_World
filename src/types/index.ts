@@ -47,6 +47,7 @@ export interface Mood {
   note: string | null;
   mood_date: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface LoveMessage {

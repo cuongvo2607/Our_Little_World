@@ -256,8 +256,8 @@ export default function HomePage() {
     `${userProfile?.display_name || 'Cường'} & ${partnerProfile?.display_name || 'Trinh'}`;
 
   // Dynamic Relative Timestamps for Moods
-  const myMoodTimeStr = formatRelativeTime(myMood?.created_at);
-  const partnerMoodTimeStr = formatRelativeTime(partnerMood?.created_at);
+  const myMoodTimeStr = formatRelativeTime(myMood?.updated_at || myMood?.created_at);
+  const partnerMoodTimeStr = formatRelativeTime(partnerMood?.updated_at || partnerMood?.created_at);
 
   return (
     <motion.div
