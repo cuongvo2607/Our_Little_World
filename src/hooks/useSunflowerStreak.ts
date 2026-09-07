@@ -23,7 +23,7 @@ export function getSunflowerStage(streakDays: number): {
 export function useSunflowerStreak() {
   const { user, partnerProfile, couple } = useCouple();
   const [streakData, setStreakData] = useState<CoupleStreak>({
-    id: 'derived-streak',
+    id: 'streak-data',
     couple_id: couple?.id || '',
     current_streak: 0,
     max_streak: 0,
@@ -51,10 +51,10 @@ export function useSunflowerStreak() {
     setLoading(true);
     try {
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[SUNFLOWER] Deriving streak data for couple:', couple.id);
+        console.log('[SUNFLOWER] Fetching & deriving streak data for couple:', couple.id);
       }
 
-      // Parallel fetch from love_messages, moods, memories (100% existing DB tables)
+      // 1. Parallel fetch from love_messages, moods, memories
       const [msgRes, moodRes, memRes] = await Promise.all([
         supabase
           .from('love_messages')
@@ -75,6 +75,31 @@ export function useSunflowerStreak() {
           .order('created_at', { ascending: false })
           .limit(100),
       ]);
+
+      // 2. Fetch from couple_daily_activities table if created
+      let cdaData: any[] = [];
+      try {
+        const { data: acts } = await supabase
+          .from('couple_daily_activities')
+          .select('*')
+          .eq('couple_id', couple.id);
+        if (acts) cdaData = acts;
+      } catch {
+        // Table not created yet or 404
+      }
+
+      // 3. Fetch from couple_streaks table if created
+      let storedStreakRow: any = null;
+      try {
+        const { data: sRow } = await supabase
+          .from('couple_streaks')
+          .select('*')
+          .eq('couple_id', couple.id)
+          .maybeSingle();
+        if (sRow) storedStreakRow = sRow;
+      } catch {
+        // Table not created yet or 404
+      }
 
       // Map of dateKey (YYYY-MM-DD in Vietnam TZ) -> Map<userId, DailyActivity>
       const dateUserMap: Record<string, Record<string, DailyActivity>> = {};
@@ -124,6 +149,22 @@ export function useSunflowerStreak() {
             activity_date: dk,
             activity_type: 'memory',
             created_at: m.created_at,
+          };
+        }
+      });
+
+      // Process couple_daily_activities DB rows if table exists
+      cdaData.forEach((act) => {
+        const dk = act.activity_date;
+        if (!dateUserMap[dk]) dateUserMap[dk] = {};
+        if (!dateUserMap[dk][act.user_id]) {
+          dateUserMap[dk][act.user_id] = {
+            id: act.id || `cda-${act.created_at}`,
+            couple_id: couple.id,
+            user_id: act.user_id,
+            activity_date: dk,
+            activity_type: act.activity_type || 'message',
+            created_at: act.created_at || new Date().toISOString(),
           };
         }
       });
@@ -214,7 +255,11 @@ export function useSunflowerStreak() {
           }
         }
       }
-      maxStreak = Math.max(maxStreak, currentStreak);
+
+      if (storedStreakRow) {
+        currentStreak = Math.max(currentStreak, storedStreakRow.current_streak || 0);
+        maxStreak = Math.max(maxStreak, storedStreakRow.max_streak || 0);
+      }
 
       const yesterdayCompleted = isDateCompleted(yesterdayDateStr);
       const pastDates = allDates.filter((d) => d < yesterdayDateStr);
@@ -227,11 +272,11 @@ export function useSunflowerStreak() {
       }
 
       setStreakData({
-        id: 'derived-streak',
+        id: storedStreakRow?.id || 'derived-streak',
         couple_id: couple.id,
         current_streak: currentStreak,
         max_streak: maxStreak,
-        water_tokens: 1,
+        water_tokens: storedStreakRow?.water_tokens ?? 1,
         last_calculated_date: todayDateStr,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -247,7 +292,7 @@ export function useSunflowerStreak() {
     fetchStreakData();
   }, [fetchStreakData]);
 
-  // Realtime listener across existing tables ONLY
+  // Realtime listener across messages, moods, memories, and streak tables
   useEffect(() => {
     if (!couple?.id) return;
 
@@ -269,6 +314,16 @@ export function useSunflowerStreak() {
         { event: '*', schema: 'public', table: 'memories', filter: `couple_id=eq.${couple.id}` },
         () => fetchStreakData()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_daily_activities', filter: `couple_id=eq.${couple.id}` },
+        () => fetchStreakData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_streaks', filter: `couple_id=eq.${couple.id}` },
+        () => fetchStreakData()
+      )
       .subscribe();
 
     return () => {
@@ -281,6 +336,14 @@ export function useSunflowerStreak() {
   };
 
   const consumeRescueWater = async () => {
+    try {
+      await supabase
+        .from('couple_streaks')
+        .update({ water_tokens: Math.max(0, (streakData.water_tokens || 1) - 1) })
+        .eq('couple_id', couple?.id);
+    } catch {
+      // Table may not exist yet
+    }
     setIsYesterdayMissed(false);
     await fetchStreakData();
     return true;
