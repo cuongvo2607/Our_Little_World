@@ -145,14 +145,17 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
 /**
  * Returns YYYY-MM-DD date string in Vietnam timezone (Asia/Ho_Chi_Minh)
  */
-export function getVietnamDateString(date: Date = new Date()): string {
+export function getVietnamDateString(date: Date | string = new Date()): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
+
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   });
-  return formatter.format(date);
+  return formatter.format(d);
 }
 
 
