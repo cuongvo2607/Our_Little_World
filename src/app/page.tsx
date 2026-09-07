@@ -33,6 +33,7 @@ import {
   Smile,
   Bell,
   MapPin,
+  Plus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -45,6 +46,58 @@ const MOOD_OPTIONS: { emoji: MoodEmoji; label: string }[] = [
   { emoji: '🥰', label: 'Yêu đời' },
   { emoji: '🥳', label: 'Rất vui' },
 ];
+
+/**
+ * Elegant Skeleton Shimmer loader for Home Page when data is resolving
+ */
+function HomeSkeleton() {
+  return (
+    <div className="max-w-[760px] mx-auto space-y-4 py-2 px-1 sm:px-2 pb-28 sm:pb-32 animate-pulse">
+      {/* Header Skeleton */}
+      <div className="flex items-center justify-between pt-1">
+        <div className="space-y-1.5">
+          <div className="h-5 w-36 bg-rose-100/60 dark:bg-rose-950/40 rounded-lg" />
+          <div className="h-3 w-48 bg-rose-100/40 dark:bg-rose-950/30 rounded-md" />
+        </div>
+        <div className="w-9.5 h-9.5 rounded-full bg-rose-100/60 dark:bg-rose-950/40" />
+      </div>
+
+      {/* Avatars Skeleton */}
+      <div className="flex items-center gap-3 pt-1">
+        <div className="flex -space-x-3">
+          <div className="w-[46px] h-[46px] rounded-full bg-rose-200/60 dark:bg-rose-900/40 border-2 border-white" />
+          <div className="w-[46px] h-[46px] rounded-full bg-purple-200/60 dark:bg-purple-900/40 border-2 border-white" />
+        </div>
+        <div className="space-y-1.5">
+          <div className="h-4.5 w-32 bg-rose-100/60 dark:bg-rose-950/40 rounded-md" />
+          <div className="h-3 w-28 bg-rose-100/40 dark:bg-rose-950/30 rounded-md" />
+        </div>
+      </div>
+
+      {/* Love Counter Hero Skeleton */}
+      <div className="h-44 rounded-[26px] bg-gradient-to-br from-rose-100/60 via-pink-50/50 to-rose-100/60 dark:from-charcoal-800 dark:to-rose-950/40 p-6 flex flex-col items-center justify-center space-y-3 border border-rose-100/50">
+        <div className="h-3 w-36 bg-rose-200/50 dark:bg-rose-900/40 rounded-full" />
+        <div className="h-10 w-44 bg-rose-200/60 dark:bg-rose-900/50 rounded-xl" />
+        <div className="h-6 w-32 bg-rose-200/40 dark:bg-rose-900/30 rounded-full" />
+      </div>
+
+      {/* Mood Skeleton */}
+      <div className="p-4 space-y-3 rounded-[24px] bg-white/70 dark:bg-charcoal-800/70 border border-rose-100/40">
+        <div className="h-4 w-32 bg-rose-100/60 dark:bg-rose-950/40 rounded-md" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-16 rounded-[20px] bg-rose-50/60 dark:bg-rose-950/20" />
+          <div className="h-16 rounded-[20px] bg-purple-50/60 dark:bg-purple-950/20" />
+        </div>
+      </div>
+
+      {/* Memories Skeleton */}
+      <div className="p-4 space-y-3 rounded-[24px] bg-white/70 dark:bg-charcoal-800/70 border border-rose-100/40">
+        <div className="h-4 w-32 bg-rose-100/60 dark:bg-rose-950/40 rounded-md" />
+        <div className="aspect-[16/9] rounded-[22px] bg-rose-100/40 dark:bg-rose-950/30" />
+      </div>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { user, userProfile, partnerProfile, couple, partnerMood, myMood, loading: contextLoading, refreshData } = useCouple();
@@ -175,17 +228,15 @@ export default function HomePage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Render Skeleton when Context is loading (prevents false 0 days, false empty states)
   if (contextLoading) {
-    return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
-        <Heart className="w-10 h-10 text-[#E86D91] animate-bounce fill-[#FCE7EF]" />
-        <p className="text-xs text-[#81727B]">Đang chuẩn bị thế giới nhỏ...</p>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
-  const daysTogether = getDaysTogether(couple?.start_date);
-  const loveDuration = calculateLoveDuration(couple?.start_date);
+  // Calculate days together ONLY if couple and valid start_date exist
+  const hasStartDate = !!couple?.start_date;
+  const daysTogether = hasStartDate ? getDaysTogether(couple.start_date) : 0;
+  const loveDuration = hasStartDate ? calculateLoveDuration(couple.start_date) : { totalDays: 0, years: 0, months: 0, days: 0 };
 
   const coupleDisplayName =
     couple?.name ||
@@ -200,7 +251,7 @@ export default function HomePage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="max-w-[760px] mx-auto space-y-4 py-2 px-1 sm:px-2"
+      className="max-w-[760px] mx-auto space-y-4 py-2 px-1 sm:px-2 pb-28 sm:pb-32"
     >
       {/* Toast Notification */}
       <AnimatePresence>
@@ -273,8 +324,12 @@ export default function HomePage() {
               {coupleDisplayName}
             </h2>
             <p className="text-[11.5px] text-[#81727B] dark:text-gray-400 flex items-center gap-1 mt-0.5">
-              <span>{partnerProfile ? `Cùng với ${partnerProfile.display_name}` : 'Đang chờ người ấy kết nối...'}</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                {partnerProfile
+                  ? `Cùng với ${partnerProfile.display_name}`
+                  : 'Đang chờ người ấy kết nối...'}
+              </span>
+              {partnerProfile && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
             </p>
             <p className="text-[11px] text-[#E86D91] italic font-medium">
               Mãi là của nhau ♡
@@ -297,29 +352,43 @@ export default function HomePage() {
           CHÚNG TA ĐÃ BÊN NHAU
         </p>
 
-        <div className="flex items-center justify-center gap-3 my-1">
-          {/* Glossy 3D Heart Icon */}
-          <motion.div
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 via-[#E86D91] to-rose-500 flex items-center justify-center text-white text-3xl shadow-lg shadow-rose-300/40 shrink-0"
-          >
-            ❤️
-          </motion.div>
+        {hasStartDate ? (
+          <>
+            <div className="flex items-center justify-center gap-3 my-1">
+              {/* Glossy 3D Heart Icon */}
+              <motion.div
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                className="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 via-[#E86D91] to-rose-500 flex items-center justify-center text-white text-3xl shadow-lg shadow-rose-300/40 shrink-0"
+              >
+                ❤️
+              </motion.div>
 
-          {/* Days Count */}
-          <div className="text-[44px] sm:text-[52px] font-extrabold tracking-tight text-[#2F2730] dark:text-cream-50 leading-none">
-            {daysTogether} <span className="text-2xl sm:text-3xl font-bold text-[#2F2730] dark:text-cream-50">ngày</span>
+              {/* Days Count */}
+              <div className="text-[44px] sm:text-[52px] font-extrabold tracking-tight text-[#2F2730] dark:text-cream-50 leading-none">
+                {daysTogether} <span className="text-2xl sm:text-3xl font-bold text-[#2F2730] dark:text-cream-50">ngày</span>
+              </div>
+            </div>
+
+            {/* Sub-Pill */}
+            <div className="mt-3">
+              <span className="bg-[#FCE7EF] dark:bg-rose-950/70 text-[#E86D91] dark:text-rose-300 font-bold text-[12px] px-4 py-1.5 rounded-full border border-[rgba(232,109,145,0.2)] inline-block shadow-none">
+                {loveDuration.years > 0 ? `${loveDuration.years} năm • ` : ''}
+                {loveDuration.months} tháng • {loveDuration.days} ngày
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="py-3 space-y-2">
+            <p className="text-xs text-[#81727B]">Chưa thiết lập ngày bắt đầu tình yêu</p>
+            <Link
+              href="/profile"
+              className="inline-flex items-center gap-1 text-xs font-bold text-[#E86D91] bg-[#FCE7EF] px-3.5 py-1.5 rounded-full hover:underline"
+            >
+              + Chọn ngày yêu ngay ❤️
+            </Link>
           </div>
-        </div>
-
-        {/* Sub-Pill */}
-        <div className="mt-3">
-          <span className="bg-[#FCE7EF] dark:bg-rose-950/70 text-[#E86D91] dark:text-rose-300 font-bold text-[12px] px-4 py-1.5 rounded-full border border-[rgba(232,109,145,0.2)] inline-block shadow-none">
-            {loveDuration.years > 0 ? `${loveDuration.years} năm • ` : ''}
-            {loveDuration.months} tháng • {loveDuration.days} ngày
-          </span>
-        </div>
+        )}
       </div>
 
       {/* 3. MOOD CARD ("Hôm nay thế nào?") */}
@@ -352,14 +421,14 @@ export default function HomePage() {
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-[#81727B] font-medium">Bạn</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xl leading-none">{myMood ? myMood.mood : '😊'}</span>
+                <span className="text-xl leading-none">{myMood ? myMood.mood : '❓'}</span>
                 <span className="text-xs font-bold text-[#302830] dark:text-cream-50 truncate">
-                  {myMood ? MOOD_OPTIONS.find((m) => m.emoji === myMood.mood)?.label : 'Vui vẻ'}
+                  {myMood ? MOOD_OPTIONS.find((m) => m.emoji === myMood.mood)?.label : 'Chưa cập nhật'}
                 </span>
               </div>
               {/* Dynamic Timestamp */}
               <p className="text-[10px] text-[#E86D91] font-medium mt-0.5 truncate">
-                {myMoodTimeStr}
+                {myMood ? myMoodTimeStr : 'Chưa cập nhật'}
               </p>
             </div>
           </motion.div>
@@ -379,14 +448,14 @@ export default function HomePage() {
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-[#81727B] font-medium">Người ấy</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xl leading-none">{partnerMood ? partnerMood.mood : '🥰'}</span>
+                <span className="text-xl leading-none">{partnerMood ? partnerMood.mood : '❓'}</span>
                 <span className="text-xs font-bold text-[#302830] dark:text-cream-50 truncate">
-                  {partnerMood ? MOOD_OPTIONS.find((m) => m.emoji === partnerMood.mood)?.label : 'Yêu đời'}
+                  {partnerMood ? MOOD_OPTIONS.find((m) => m.emoji === partnerMood.mood)?.label : 'Chưa cập nhật'}
                 </span>
               </div>
               {/* Dynamic Timestamp */}
               <p className="text-[10px] text-[#E86D91] font-medium mt-0.5 truncate">
-                {partnerMoodTimeStr}
+                {partnerMood ? partnerMoodTimeStr : 'Chưa cập nhật'}
               </p>
             </div>
           </motion.div>
@@ -494,17 +563,15 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <Link href="/memories" className="block group">
-            <div className="relative aspect-[16/9] rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-gradient-to-br from-rose-100/90 to-pink-100/90 dark:from-charcoal-800 dark:to-rose-950 flex flex-col items-center justify-center p-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-white/80 dark:bg-charcoal-700 flex items-center justify-center text-rose-400 mb-2 shadow-soft-sm">
-                <ImageIcon className="w-6 h-6" />
-              </div>
-              <h4 className="text-sm font-bold text-charcoal-800 dark:text-cream-50">Hoàng hôn ở Vũng Tàu</h4>
-              <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-1">
-                <MapPin className="w-3 h-3 text-rose-400" /> 07/09/2026
-              </p>
-            </div>
-          </Link>
+          <div className="text-center py-8 border border-dashed border-rose-200 dark:border-rose-900/30 rounded-[22px]">
+            <p className="text-xs text-[#81727B]">Chưa có kỷ niệm nào.</p>
+            <Link
+              href="/memories"
+              className="inline-block mt-2 text-xs font-semibold text-[#E86D91] hover:underline"
+            >
+              + Thêm khoảnh khắc đầu tiên ❤️
+            </Link>
+          </div>
         )}
       </Card>
 

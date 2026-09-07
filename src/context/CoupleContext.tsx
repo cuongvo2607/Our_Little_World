@@ -1,18 +1,19 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Couple, Profile, Mood } from '@/types';
-import { useRouter } from 'next/navigation';
+import { User } from '@supabase/supabase-js';
 
 interface CoupleContextType {
-  user: any | null;
+  user: User | null;
   userProfile: Profile | null;
   partnerProfile: Profile | null;
   couple: Couple | null;
   partnerMood: Mood | null;
   myMood: Mood | null;
   loading: boolean;
+  hasPartner: boolean;
   refreshData: () => Promise<void>;
 }
 
@@ -24,11 +25,12 @@ const CoupleContext = createContext<CoupleContextType>({
   partnerMood: null,
   myMood: null,
   loading: true,
+  hasPartner: false,
   refreshData: async () => {},
 });
 
 export function CoupleProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [partnerProfile, setPartnerProfile] = useState<Profile | null>(null);
   const [couple, setCouple] = useState<Couple | null>(null);
@@ -37,86 +39,144 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const supabase = createClient();
-  const router = useRouter();
+  const isFetchingRef = useRef(false);
 
-  const fetchContextData = useCallback(async () => {
-    try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
+  const fetchContextData = useCallback(
+    async (overrideUser?: User | null) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      setLoading(true);
+
+      try {
+        // 1. Identify current authenticated user
+        let currentUser = overrideUser;
+        if (currentUser === undefined) {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          currentUser = authUser;
+        }
+
+        if (!currentUser) {
+          setUser(null);
+          setUserProfile(null);
+          setPartnerProfile(null);
+          setCouple(null);
+          setPartnerMood(null);
+          setMyMood(null);
+          return;
+        }
+
+        setUser(currentUser);
+
+        // 2. Fetch couple membership row for this user
+        const { data: member, error: memberErr } = await supabase
+          .from('couple_members')
+          .select('couple_id')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (memberErr || !member?.couple_id) {
+          setUserProfile(null);
+          setPartnerProfile(null);
+          setCouple(null);
+          setPartnerMood(null);
+          setMyMood(null);
+          return;
+        }
+
+        const coupleId = member.couple_id;
+
+        // 3. Fetch Couple details, Couple Members + Profiles, and Today's Moods in parallel
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        const [coupleRes, membersRes, moodsRes] = await Promise.all([
+          supabase.from('couples').select('*').eq('id', coupleId).single(),
+          supabase.from('couple_members').select('user_id, profiles(*)').eq('couple_id', coupleId),
+          supabase.from('moods').select('*').eq('couple_id', coupleId).eq('mood_date', todayStr),
+        ]);
+
+        if (coupleRes.data) {
+          setCouple(coupleRes.data);
+        }
+
+        if (membersRes.data) {
+          let foundUserProf: Profile | null = null;
+          let foundPartnerProf: Profile | null = null;
+
+          membersRes.data.forEach((m: any) => {
+            if (m.user_id === currentUser.id) {
+              foundUserProf = m.profiles;
+            } else {
+              foundPartnerProf = m.profiles;
+            }
+          });
+
+          setUserProfile(foundUserProf);
+          setPartnerProfile(foundPartnerProf);
+        }
+
+        if (moodsRes.data) {
+          let foundMyMood: Mood | null = null;
+          let foundPartnerMood: Mood | null = null;
+
+          moodsRes.data.forEach((m: Mood) => {
+            if (m.user_id === currentUser.id) {
+              foundMyMood = m;
+            } else {
+              foundPartnerMood = m;
+            }
+          });
+
+          setMyMood(foundMyMood);
+          setPartnerMood(foundPartnerMood);
+        }
+      } catch (err) {
+        console.error('[CoupleContext] Error fetching context data:', err);
+      } finally {
+        isFetchingRef.current = false;
         setLoading(false);
-        return;
       }
-      setUser(currentUser);
+    },
+    [supabase]
+  );
 
-      // Fetch user member row
-      const { data: member } = await supabase
-        .from('couple_members')
-        .select('couple_id')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-
-      if (!member) {
-        setLoading(false);
-        return;
-      }
-
-      const coupleId = member.couple_id;
-
-      // Fetch Couple
-      const { data: coupleData } = await supabase
-        .from('couples')
-        .select('*')
-        .eq('id', coupleId)
-        .single();
-      setCouple(coupleData);
-
-      // Fetch Couple Members & Profiles
-      const { data: members } = await supabase
-        .from('couple_members')
-        .select('user_id, profiles(*)')
-        .eq('couple_id', coupleId);
-
-      if (members) {
-        members.forEach((m: any) => {
-          if (m.user_id === currentUser.id) {
-            setUserProfile(m.profiles);
-          } else {
-            setPartnerProfile(m.profiles);
-          }
-        });
-      }
-
-      // Fetch Moods for today
-      const todayStr = new Date().toISOString().split('T')[0];
-      const { data: moodsData } = await supabase
-        .from('moods')
-        .select('*')
-        .eq('couple_id', coupleId)
-        .eq('mood_date', todayStr);
-
-      if (moodsData) {
-        moodsData.forEach((m: Mood) => {
-          if (m.user_id === currentUser.id) setMyMood(m);
-          else setPartnerMood(m);
-        });
-      }
-    } catch (err) {
-      console.error('Error in CoupleProvider fetch:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
+  // Initial load & Auth State Listener (handles rehydration on refresh & initial load)
   useEffect(() => {
+    // Run initial fetch
     fetchContextData();
-  }, [fetchContextData]);
 
-  // Subscribe to Realtime Postgres Changes for profiles, couples, and moods
+    // Listen to Supabase Auth State changes (SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION, SIGNED_OUT)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[CoupleContext] Auth state changed:', event, session?.user?.email);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setUserProfile(null);
+        setPartnerProfile(null);
+        setCouple(null);
+        setPartnerMood(null);
+        setMyMood(null);
+        setLoading(false);
+      } else if (session?.user) {
+        fetchContextData(session.user);
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, fetchContextData]);
+
+  // Subscribe to Realtime changes for profiles, couples, and moods when couple.id is available
   useEffect(() => {
     if (!couple?.id) return;
 
+    const channelName = `couple-context-realtime-${couple.id}`;
     const channel = supabase
-      .channel(`couple-realtime-${couple.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
@@ -139,6 +199,8 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
     };
   }, [couple?.id, supabase, fetchContextData]);
 
+  const hasPartner = !!partnerProfile;
+
   return (
     <CoupleContext.Provider
       value={{
@@ -149,7 +211,11 @@ export function CoupleProvider({ children }: { children: React.ReactNode }) {
         partnerMood,
         myMood,
         loading,
-        refreshData: fetchContextData,
+        hasPartner,
+        refreshData: async () => {
+          isFetchingRef.current = false;
+          await fetchContextData();
+        },
       }}
     >
       {children}
