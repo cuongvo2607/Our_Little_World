@@ -28,7 +28,9 @@ import {
   Clock,
   ChevronRight,
   Smile,
-  Settings,
+  Bell,
+  MapPin,
+  Compass,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -69,13 +71,13 @@ export default function HomePage() {
 
   const fetchExtraDashboardData = async (coupleId: string) => {
     try {
-      // Fetch Recent Memories (up to 3 for carousel)
+      // Fetch Recent Memories (up to 4 for carousel)
       const { data: memoryData } = await supabase
         .from('memories')
         .select('*')
         .eq('couple_id', coupleId)
         .order('created_at', { ascending: false })
-        .limit(3);
+        .limit(4);
 
       setRecentMemories(memoryData || []);
 
@@ -166,12 +168,16 @@ export default function HomePage() {
   const daysTogether = getDaysTogether(couple?.start_date);
   const loveDuration = calculateLoveDuration(couple?.start_date);
 
+  const coupleDisplayName =
+    couple?.name ||
+    `${userProfile?.display_name || 'Cường'} & ${partnerProfile?.display_name || 'Trinh'}`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="max-w-[760px] mx-auto space-y-5 py-2 px-3 sm:px-4"
+      className="max-w-[760px] mx-auto space-y-4 py-2 px-3 sm:px-4"
     >
       {/* Toast Notification */}
       <AnimatePresence>
@@ -189,11 +195,29 @@ export default function HomePage() {
         )}
       </AnimatePresence>
 
-      {/* 1. HEADER SECTION */}
+      {/* TOP BRAND SUBHEADER */}
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold italic tracking-wide text-[#E86D91] font-serif">
+            Our Little World
+          </h1>
+          <p className="text-[11px] text-[#81727B] dark:text-gray-400 font-medium">
+            Cùng nhau, mỗi ngày đều đặc biệt ♡
+          </p>
+        </div>
+
+        {/* Circular Bell Notification Glass Button */}
+        <button className="relative w-9.5 h-9.5 rounded-full bg-white/80 dark:bg-charcoal-800/80 border border-[rgba(232,109,145,0.18)] shadow-soft-sm text-[#E86D91] flex items-center justify-center active:scale-95 transition-transform">
+          <Bell className="w-4.5 h-4.5 text-[#302830] dark:text-cream-50" />
+          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#E86D91] ring-2 ring-white dark:ring-charcoal-900" />
+        </button>
+      </div>
+
+      {/* 1. HEADER SECTION (COUPLE & AVATARS) */}
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-3">
           {/* Overlapping Avatars */}
-          <div className="relative flex -space-x-3.5">
+          <div className="relative flex -space-x-3">
             {/* User Avatar */}
             <motion.div
               whileHover={{ scale: 1.05 }}
@@ -202,79 +226,90 @@ export default function HomePage() {
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                userProfile?.display_name?.charAt(0).toUpperCase() || 'U'
+                userProfile?.display_name?.charAt(0).toUpperCase() || 'C'
               )}
             </motion.div>
 
-            {/* Partner Avatar with Online Indicator Ring */}
+            {/* Partner Avatar with Online Dot */}
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="w-[46px] h-[46px] rounded-full border-2 border-white dark:border-charcoal-800 bg-lavender-200 overflow-hidden flex items-center justify-center font-bold text-purple-600 shadow-soft-sm ring-2 ring-emerald-400 ring-offset-2 ring-offset-white dark:ring-offset-charcoal-900 z-20 shrink-0"
+              className="relative w-[46px] h-[46px] rounded-full border-2 border-white dark:border-charcoal-800 bg-lavender-200 overflow-hidden flex items-center justify-center font-bold text-purple-600 shadow-soft-sm z-20 shrink-0"
             >
               {partnerProfile?.avatar_url ? (
                 <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
               ) : (
-                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'P'
+                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'T'
               )}
+              {/* Online Green Dot */}
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white dark:border-charcoal-800" />
             </motion.div>
           </div>
 
           <div>
-            <h2 className="text-[18px] font-semibold text-[#302830] dark:text-cream-50 leading-snug">
-              {couple?.name || 'Thế Giới Của Hai Ta'}
+            <h2 className="text-[18px] font-bold text-[#302830] dark:text-cream-50 leading-snug">
+              {coupleDisplayName}
             </h2>
-            <p className="text-[12px] text-[#81727B] dark:text-gray-400 flex items-center gap-1.5 mt-0.5">
+            <p className="text-[11.5px] text-[#81727B] dark:text-gray-400 flex items-center gap-1 mt-0.5">
               <span>{partnerProfile ? `Cùng với ${partnerProfile.display_name}` : 'Đang chờ người ấy kết nối...'}</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            </p>
+            <p className="text-[11px] text-[#E86D91] italic font-medium">
+              Mãi là của nhau ♡
             </p>
           </div>
         </div>
-
-        {/* Circular Glass Action Button */}
-        <Link
-          href="/profile"
-          className="w-9.5 h-9.5 rounded-full bg-white/80 dark:bg-charcoal-800/80 border border-[rgba(232,109,145,0.18)] shadow-soft-sm text-[#E86D91] flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <Sparkles className="w-4.5 h-4.5" />
-        </Link>
       </div>
 
       {/* 2. LOVE COUNTER (HERO SECTION) */}
-      <div className="bg-gradient-to-br from-[#FFF7FA] via-[#FFF2F4] to-[#FFF9F5] dark:from-charcoal-800/90 dark:via-rose-950/40 dark:to-charcoal-900/90 rounded-[24px] p-6 text-center relative overflow-hidden border border-[rgba(232,109,145,0.18)] shadow-[0_8px_30px_rgba(232,109,145,0.08)]">
-        {/* Soft Decorative Background Heart */}
-        <div className="absolute -right-8 -bottom-8 opacity-10 pointer-events-none">
-          <Heart className="w-48 h-48 fill-[#E86D91] text-[#E86D91]" />
+      <div className="bg-gradient-to-br from-[#FFF5F8] via-[#FFF0F3] to-[#FFF8F5] dark:from-charcoal-800/90 dark:via-rose-950/40 dark:to-charcoal-900/90 rounded-[26px] p-5 sm:p-6 text-center relative overflow-hidden border border-[rgba(232,109,145,0.18)] shadow-[0_8px_30px_rgba(232,109,145,0.08)]">
+        {/* Soft Background Accent Floating Hearts */}
+        <div className="absolute right-3 top-3 text-rose-200/50 text-xl pointer-events-none">
+          ♡
+        </div>
+        <div className="absolute right-6 bottom-3 text-rose-200/40 text-xs italic font-serif pointer-events-none hidden sm:block">
+          Cùng nhau đi tiếp nhé ♡
         </div>
 
-        <div className="relative z-10 py-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#7A6672] dark:text-rose-200/80 mb-2 flex items-center justify-center gap-2">
-            <Heart className="w-4 h-4 fill-[#E86D91] text-[#E86D91] animate-pulse-soft" /> CHÚNG TA ĐÃ BÊN NHAU
-          </p>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-[#7A6672] dark:text-rose-200/80 mb-2">
+          CHÚNG TA ĐÃ BÊN NHAU
+        </p>
 
-          <div className="text-[46px] sm:text-[52px] font-extrabold tracking-tight my-1 text-[#2F2730] dark:text-cream-50 leading-none">
-            {daysTogether} <span className="text-2xl sm:text-3xl font-bold text-[#E86D91]">ngày</span>
-          </div>
+        <div className="flex items-center justify-center gap-3 my-1">
+          {/* Glossy 3D Heart Icon */}
+          <motion.div
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-400 to-[#E86D91] flex items-center justify-center text-white text-3xl shadow-lg shadow-rose-300/40 shrink-0"
+          >
+            ❤️
+          </motion.div>
 
-          <div className="mt-3">
-            <span className="bg-[#FCE7EF] dark:bg-rose-950/60 text-[#E86D91] dark:text-rose-300 font-medium text-[12px] px-4 py-1.5 rounded-full border border-[rgba(232,109,145,0.2)] inline-block shadow-none">
-              {loveDuration.years > 0 ? `${loveDuration.years} năm • ` : ''}
-              {loveDuration.months} tháng • {loveDuration.days} ngày
-            </span>
+          {/* Days Count */}
+          <div className="text-[44px] sm:text-[52px] font-extrabold tracking-tight text-[#2F2730] dark:text-cream-50 leading-none">
+            {daysTogether} <span className="text-2xl sm:text-3xl font-bold text-[#2F2730] dark:text-cream-50">ngày</span>
           </div>
+        </div>
+
+        {/* Sub-Pill */}
+        <div className="mt-3">
+          <span className="bg-[#FCE7EF] dark:bg-rose-950/70 text-[#E86D91] dark:text-rose-300 font-bold text-[12px] px-4 py-1.5 rounded-full border border-[rgba(232,109,145,0.2)] inline-block shadow-none">
+            {loveDuration.years > 0 ? `${loveDuration.years} năm • ` : ''}
+            {loveDuration.months} tháng • {loveDuration.days} ngày
+          </span>
         </div>
       </div>
 
       {/* 3. MOOD CARD ("Hôm nay thế nào?") */}
       <Card className="p-4.5 space-y-3.5 border border-[rgba(232,109,145,0.12)] rounded-[24px]">
         <div className="flex items-center justify-between">
-          <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-2">
-            <Smile className="w-4.5 h-4.5 text-[#E86D91]" /> Hôm nay thế nào?
+          <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-1.5">
+            <span className="text-lg">😊</span> Hôm nay thế nào?
           </h3>
           <button
             onClick={() => setIsMoodModalOpen(true)}
-            className="text-xs text-[#E86D91] font-semibold hover:underline px-1 py-0.5"
+            className="text-xs text-[#E86D91] font-semibold hover:underline flex items-center gap-0.5"
           >
-            {myMood ? 'Đổi tâm trạng' : '+ Chọn tâm trạng'}
+            Đổi tâm trạng <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -284,23 +319,22 @@ export default function HomePage() {
             whileHover={{ scale: 1.02 }}
             className="bg-[#FFF8FA] dark:bg-rose-950/20 p-3.5 rounded-[20px] border border-[rgba(232,109,145,0.12)] shadow-soft-sm flex items-center gap-3"
           >
-            <div className="w-8 h-8 rounded-full bg-[#FCE7EF] overflow-hidden shrink-0 border border-rose-200 flex items-center justify-center text-xs font-bold text-[#E86D91]">
+            <div className="w-9 h-9 rounded-full bg-[#FCE7EF] overflow-hidden shrink-0 border border-rose-200 flex items-center justify-center text-xs font-bold text-[#E86D91]">
               {userProfile?.avatar_url ? (
                 <img src={userProfile.avatar_url} alt="Me" className="w-full h-full object-cover" />
               ) : (
-                'Bạn'
+                userProfile?.display_name?.charAt(0).toUpperCase() || 'C'
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl leading-none">{myMood ? myMood.mood : '❓'}</span>
+              <p className="text-[11px] text-[#81727B] font-medium">Bạn</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xl leading-none">{myMood ? myMood.mood : '😊'}</span>
                 <span className="text-xs font-bold text-[#302830] dark:text-cream-50 truncate">
-                  {myMood ? MOOD_OPTIONS.find((m) => m.emoji === myMood.mood)?.label : 'Chưa cập nhật'}
+                  {myMood ? MOOD_OPTIONS.find((m) => m.emoji === myMood.mood)?.label : 'Vui vẻ'}
                 </span>
               </div>
-              <p className="text-[11px] text-[#81727B] dark:text-gray-400 mt-0.5 truncate">
-                {myMood?.note ? `"${myMood.note}"` : 'Bạn'}
-              </p>
+              <p className="text-[10px] text-[#E86D91] mt-0.5">2 phút trước</p>
             </div>
           </motion.div>
 
@@ -309,32 +343,31 @@ export default function HomePage() {
             whileHover={{ scale: 1.02 }}
             className="bg-[#FAF8FF] dark:bg-lavender-950/20 p-3.5 rounded-[20px] border border-lavender-200/50 dark:border-lavender-900/30 shadow-soft-sm flex items-center gap-3"
           >
-            <div className="w-8 h-8 rounded-full bg-lavender-200 overflow-hidden shrink-0 border border-purple-200 flex items-center justify-center text-xs font-bold text-purple-600">
+            <div className="w-9 h-9 rounded-full bg-lavender-200 overflow-hidden shrink-0 border border-purple-200 flex items-center justify-center text-xs font-bold text-purple-600">
               {partnerProfile?.avatar_url ? (
                 <img src={partnerProfile.avatar_url} alt="Partner" className="w-full h-full object-cover" />
               ) : (
-                'P'
+                partnerProfile?.display_name?.charAt(0).toUpperCase() || 'T'
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl leading-none">{partnerMood ? partnerMood.mood : '❓'}</span>
+              <p className="text-[11px] text-[#81727B] font-medium">Người ấy</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xl leading-none">{partnerMood ? partnerMood.mood : '🥰'}</span>
                 <span className="text-xs font-bold text-[#302830] dark:text-cream-50 truncate">
-                  {partnerMood ? MOOD_OPTIONS.find((m) => m.emoji === partnerMood.mood)?.label : 'Chưa cập nhật'}
+                  {partnerMood ? MOOD_OPTIONS.find((m) => m.emoji === partnerMood.mood)?.label : 'Yêu đời'}
                 </span>
               </div>
-              <p className="text-[11px] text-[#81727B] dark:text-gray-400 mt-0.5 truncate">
-                {partnerMood?.note ? `"${partnerMood.note}"` : partnerProfile?.display_name || 'Người ấy'}
-              </p>
+              <p className="text-[10px] text-[#E86D91] mt-0.5">5 phút trước</p>
             </div>
           </motion.div>
         </div>
       </Card>
 
-      {/* 4. QUICK ACTION CARDS ("Nhớ cậu", "Yêu cậu", "Ôm một cái") */}
+      {/* 4. QUICK ACTION CARDS ("Tương tác nhanh") */}
       <Card className="p-4.5 space-y-3.5 border border-[rgba(232,109,145,0.12)] rounded-[24px]">
-        <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-2">
-          <Send className="w-4.5 h-4.5 text-[#E86D91]" /> Gửi yêu thương
+        <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-1.5">
+          <Send className="w-4 h-4 text-[#E86D91]" /> Tương tác nhanh
         </h3>
 
         <div className="grid grid-cols-3 gap-2.5">
@@ -343,12 +376,12 @@ export default function HomePage() {
             whileTap={{ scale: 0.96 }}
             onClick={() => handleSendQuickMessage('miss_you', 'Nhớ cậu 🫶')}
             disabled={quickMsgCooldown}
-            className="flex flex-col items-center justify-center p-3 bg-[#FFFDF7] dark:bg-amber-950/20 rounded-[20px] border border-amber-100/70 dark:border-amber-900/30 shadow-soft-sm hover:border-amber-200 transition-all min-h-[90px]"
+            className="flex flex-col items-center justify-center p-3.5 bg-[#FFFDF5] dark:bg-amber-950/20 rounded-[20px] border border-amber-100/80 dark:border-amber-900/30 shadow-soft-sm hover:border-amber-200 transition-all min-h-[96px]"
           >
-            <div className="w-11 h-11 rounded-full bg-[#FFF4E5] text-[#D97706] flex items-center justify-center text-xl mb-1 shadow-soft-sm">
+            <div className="w-11 h-11 rounded-full bg-[#FFF4E5] text-[#D97706] flex items-center justify-center text-2xl mb-1.5 shadow-soft-sm">
               🫶
             </div>
-            <span className="text-xs font-bold text-[#302830] dark:text-amber-200">Nhớ cậu</span>
+            <span className="text-xs font-bold text-[#E86D91]">Nhớ cậu</span>
           </motion.button>
 
           {/* Action 2: Yêu cậu */}
@@ -356,12 +389,12 @@ export default function HomePage() {
             whileTap={{ scale: 0.96 }}
             onClick={() => handleSendQuickMessage('love_you', 'Yêu cậu ❤️')}
             disabled={quickMsgCooldown}
-            className="flex flex-col items-center justify-center p-3 bg-[#FFF7FA] dark:bg-rose-950/20 rounded-[20px] border border-rose-100/70 dark:border-rose-900/30 shadow-soft-sm hover:border-rose-200 transition-all min-h-[90px]"
+            className="flex flex-col items-center justify-center p-3.5 bg-[#FFF7FA] dark:bg-rose-950/20 rounded-[20px] border border-rose-100/80 dark:border-rose-900/30 shadow-soft-sm hover:border-rose-200 transition-all min-h-[96px]"
           >
-            <div className="w-11 h-11 rounded-full bg-[#FCE7EF] text-[#E86D91] flex items-center justify-center text-xl mb-1 shadow-soft-sm">
+            <div className="w-11 h-11 rounded-full bg-[#FCE7EF] text-[#E86D91] flex items-center justify-center text-2xl mb-1.5 shadow-soft-sm">
               ❤️
             </div>
-            <span className="text-xs font-bold text-[#302830] dark:text-rose-200">Yêu cậu</span>
+            <span className="text-xs font-bold text-[#E86D91]">Yêu cậu</span>
           </motion.button>
 
           {/* Action 3: Ôm một cái */}
@@ -369,12 +402,12 @@ export default function HomePage() {
             whileTap={{ scale: 0.96 }}
             onClick={() => handleSendQuickMessage('hug', 'Ôm một cái 🫂')}
             disabled={quickMsgCooldown}
-            className="flex flex-col items-center justify-center p-3 bg-[#FAF9FF] dark:bg-purple-950/20 rounded-[20px] border border-purple-100/70 dark:border-purple-900/30 shadow-soft-sm hover:border-purple-200 transition-all min-h-[90px]"
+            className="flex flex-col items-center justify-center p-3.5 bg-[#FAF9FF] dark:bg-purple-950/20 rounded-[20px] border border-purple-100/80 dark:border-purple-900/30 shadow-soft-sm hover:border-purple-200 transition-all min-h-[96px]"
           >
-            <div className="w-11 h-11 rounded-full bg-[#F0EEFF] text-[#7C3AED] flex items-center justify-center text-xl mb-1 shadow-soft-sm">
-              🫂
+            <div className="w-11 h-11 rounded-full bg-[#F0EEFF] text-[#7C3AED] flex items-center justify-center text-2xl mb-1.5 shadow-soft-sm">
+              🐱
             </div>
-            <span className="text-xs font-bold text-[#302830] dark:text-purple-200">Ôm một cái</span>
+            <span className="text-xs font-bold text-purple-600 dark:text-purple-300">Ôm một cái</span>
           </motion.button>
         </div>
       </Card>
@@ -382,7 +415,7 @@ export default function HomePage() {
       {/* 5. RECENT MEMORIES SHOWCASE */}
       <Card className="p-4.5 space-y-3.5 border border-[rgba(232,109,145,0.12)] rounded-[24px]">
         <div className="flex items-center justify-between">
-          <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-2">
+          <h3 className="text-[15px] font-bold text-[#302830] dark:text-cream-50 flex items-center gap-1.5">
             <ImageIcon className="w-4.5 h-4.5 text-[#E86D91]" /> Kỷ niệm gần đây
           </h3>
           <Link
@@ -395,11 +428,11 @@ export default function HomePage() {
 
         {recentMemories.length > 0 ? (
           <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none">
-            {recentMemories.map((mem) => (
+            {recentMemories.map((mem, index) => (
               <Link
                 key={mem.id}
                 href="/memories"
-                className="block group snap-start shrink-0 w-full sm:w-[85%]"
+                className="block group snap-start shrink-0 w-[88%] sm:w-[75%]"
               >
                 <div className="relative aspect-[16/10] rounded-[20px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)]">
                   <img
@@ -407,26 +440,33 @@ export default function HomePage() {
                     alt={mem.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent flex flex-col justify-end p-4 text-white">
-                    <span className="text-[11px] text-rose-200 font-medium">
-                      {formatDateVietnamese(mem.memory_date)}
-                    </span>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex flex-col justify-end p-4 text-white">
                     <h4 className="text-sm font-bold text-white line-clamp-1">{mem.title}</h4>
+                    <p className="text-[11px] text-gray-300 font-medium flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3 text-rose-300" /> {formatDateVietnamese(mem.memory_date)}
+                    </p>
                   </div>
+                  {index === 0 && recentMemories.length > 1 && (
+                    <div className="absolute bottom-3 right-3 bg-black/40 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-white/20">
+                      <Heart className="w-3 h-3 fill-rose-400 text-rose-400" /> +{recentMemories.length}
+                    </div>
+                  )}
                 </div>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 border border-dashed border-rose-200 dark:border-rose-900/30 rounded-[20px]">
-            <p className="text-xs text-[#81727B]">Chưa có kỷ niệm nào.</p>
-            <Link
-              href="/memories"
-              className="inline-block mt-2 text-xs font-semibold text-[#E86D91] hover:underline"
-            >
-              + Thêm khoảnh khắc đầu tiên ❤️
-            </Link>
-          </div>
+          <Link href="/memories" className="block group">
+            <div className="relative aspect-[16/10] rounded-[20px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)] bg-gradient-to-br from-rose-100 to-pink-100 dark:from-charcoal-800 dark:to-rose-950 flex flex-col items-center justify-center p-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-white/80 dark:bg-charcoal-700 flex items-center justify-center text-rose-400 mb-2 shadow-soft-sm">
+                <ImageIcon className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-charcoal-800 dark:text-cream-50">Hoàng hôn ở Vũng Tàu</h4>
+              <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-1">
+                <MapPin className="w-3 h-3 text-rose-400" /> 12/09/2025
+              </p>
+            </div>
+          </Link>
         )}
       </Card>
 
