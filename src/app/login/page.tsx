@@ -50,7 +50,15 @@ export default function LoginPage() {
         router.push('/');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Đã có lỗi xảy ra. Vui lòng thử lại.');
+      console.error('Auth Error:', err);
+
+      if (err?.message === 'Failed to fetch' || err?.toString()?.includes('Failed to fetch')) {
+        setErrorMsg(
+          'Không thể kết nối đến máy chủ Supabase. Vui lòng kiểm tra lại NEXT_PUBLIC_SUPABASE_URL trên Vercel và bấm Redeploy lại dự án.'
+        );
+      } else {
+        setErrorMsg(err.message || 'Đã có lỗi xảy ra. Vui lòng thử lại.');
+      }
     } finally {
       setLoading(false);
     }
@@ -103,7 +111,7 @@ export default function LoginPage() {
           </div>
 
           {errorMsg && (
-            <div className="p-3 text-xs bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300 rounded-2xl border border-red-200/50">
+            <div className="p-3 text-xs bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300 rounded-2xl border border-red-200/50 leading-relaxed">
               {errorMsg}
             </div>
           )}
