@@ -42,7 +42,7 @@ export default function MessagesPage() {
     setShowScrollBottomBtn(isFarFromBottom);
   };
 
-  // Fetch initial messages (ASC order: Oldest -> Newest)
+  // Fetch initial messages (50 most recent, ASC order: Oldest -> Newest)
   const fetchMessages = useCallback(async () => {
     if (!couple?.id) return;
     setLoading(true);
@@ -51,7 +51,8 @@ export default function MessagesPage() {
         .from('love_messages')
         .select('*')
         .eq('couple_id', couple.id)
-        .order('created_at', { ascending: true }); // ASC: Oldest -> Newest
+        .order('created_at', { ascending: true })
+        .limit(50);
 
       if (error) throw error;
       setMessages(data || []);
@@ -67,12 +68,17 @@ export default function MessagesPage() {
     fetchMessages();
   }, [fetchMessages]);
 
-  // Subscribe to Realtime postgres_changes for love_messages
+  // Subscribe to Realtime postgres_changes for love_messages (INSERT, UPDATE, DELETE)
   useEffect(() => {
     if (!couple?.id) return;
 
+    const channelName = `chat:${couple.id}`;
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Realtime Chat] Initiating channel: ${channelName}`);
+    }
+
     const channel = supabase
-      .channel(`love-messages-chat-${couple.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -83,11 +89,30 @@ export default function MessagesPage() {
         },
         (payload) => {
           const newMsg = payload.new as LoveMessage;
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[Realtime Chat] INSERT event:', newMsg);
+          }
+
           setMessages((prev) => {
-            // Prevent duplicate message if already added via optimistic UI
+            // 1. Exact ID deduplication check
             if (prev.some((m) => m.id === newMsg.id)) {
               return prev;
             }
+
+            // 2. Deduplicate optimistic message matching temp ID & message content
+            const tempIndex = prev.findIndex(
+              (m) =>
+                m.id.startsWith('temp-') &&
+                m.sender_id === newMsg.sender_id &&
+                m.message === newMsg.message
+            );
+
+            if (tempIndex !== -1) {
+              const updated = [...prev];
+              updated[tempIndex] = newMsg;
+              return updated;
+            }
+
             return [...prev, newMsg];
           });
 
@@ -96,16 +121,65 @@ export default function MessagesPage() {
             const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
             const isNearBottom = scrollHeight - scrollTop - clientHeight <= 150;
             if (isNearBottom || newMsg.sender_id === user?.id) {
-              setTimeout(() => scrollToBottom(true), 100);
+              setTimeout(() => scrollToBottom(true), 50);
             } else {
               setShowScrollBottomBtn(true);
             }
           }
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'love_messages',
+          filter: `couple_id=eq.${couple.id}`,
+        },
+        (payload) => {
+          const updatedMsg = payload.new as LoveMessage;
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[Realtime Chat] UPDATE event:', updatedMsg);
+          }
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'love_messages',
+          filter: `couple_id=eq.${couple.id}`,
+        },
+        (payload) => {
+          const deletedId = payload.old.id;
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[Realtime Chat] DELETE event:', deletedId);
+          }
+          setMessages((prev) => prev.filter((m) => m.id !== deletedId));
+        }
+      )
+      .subscribe((status, err) => {
+        if (process.env.NODE_ENV !== 'production') {
+          if (status === 'SUBSCRIBED') {
+            console.log(`[Realtime Chat] SUBSCRIBED to ${channelName}`);
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error(`[Realtime Chat] CHANNEL_ERROR on ${channelName}:`, err);
+          } else if (status === 'TIMED_OUT') {
+            console.warn(`[Realtime Chat] TIMED_OUT on ${channelName}`);
+          } else if (status === 'CLOSED') {
+            console.log(`[Realtime Chat] CLOSED channel ${channelName}`);
+          }
+        }
+      });
 
     return () => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[Realtime Chat] Cleaning up channel ${channelName}`);
+      }
       supabase.removeChannel(channel);
     };
   }, [couple?.id, supabase, user?.id, scrollToBottom]);
@@ -155,7 +229,7 @@ export default function MessagesPage() {
 
       if (error) throw error;
 
-      // Replace temp optimistic message with real DB message
+      // Replace temp optimistic message with real DB message (if not replaced already by Realtime handler)
       if (data) {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? data : m))
@@ -163,7 +237,7 @@ export default function MessagesPage() {
       }
     } catch (err) {
       console.error('Error sending message:', err);
-      // Remove optimistic message if error
+      // Remove optimistic message if insert failed
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
@@ -171,7 +245,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] lg:h-[calc(100vh-3rem)] max-w-full relative">
+    <div className="flex flex-col h-[calc(100dvh-5.5rem)] lg:h-[calc(100vh-3rem)] max-w-full relative overflow-hidden">
       {/* Chat Room Header */}
       <div className="flex items-center justify-between px-3.5 py-2.5 bg-white/80 dark:bg-charcoal-800/80 backdrop-blur-md rounded-2xl border border-rose-100 dark:border-rose-900/30 shadow-soft-sm mb-2 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -304,7 +378,7 @@ export default function MessagesPage() {
             onClick={() => scrollToBottom(true)}
             className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-rose-500 text-white text-xs font-semibold rounded-full shadow-soft-lg flex items-center gap-1.5 active:scale-95 transition-transform"
           >
-            <ArrowDown className="w-3.5 h-3.5" /> Tin nhắn mới
+            <ArrowDown className="w-3.5 h-3.5" /> Tin nhắn mới ↓
           </motion.button>
         )}
       </AnimatePresence>
@@ -372,7 +446,7 @@ export default function MessagesPage() {
       </AnimatePresence>
 
       {/* Chat Input Bar fixed at bottom */}
-      <div className="shrink-0 pt-2 pb-safe bg-cream-50/90 dark:bg-charcoal-900/90 backdrop-blur-md border-t border-rose-100 dark:border-rose-950/30">
+      <div className="shrink-0 pt-2 pb-safe px-1 bg-cream-50/95 dark:bg-charcoal-900/95 backdrop-blur-md border-t border-rose-100 dark:border-rose-950/30">
         <form
           onSubmit={(e) => {
             e.preventDefault();
