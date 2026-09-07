@@ -1,0 +1,103 @@
+export type MoodEmoji = '😭' | '😔' | '😐' | '😊' | '🥰' | '🥳';
+
+export type LoveMessageType = 'miss_you' | 'love_you' | 'hug' | 'custom';
+
+export interface Profile {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  birthday: string | null;
+  created_at: string;
+}
+
+export interface Couple {
+  id: string;
+  name: string;
+  start_date: string;
+  invite_code: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface CoupleMember {
+  id: string;
+  couple_id: string;
+  user_id: string;
+  joined_at: string;
+  profile?: Profile;
+}
+
+export interface Memory {
+  id: string;
+  couple_id: string;
+  created_by: string;
+  title: string;
+  description: string;
+  memory_date: string;
+  image_url: string;
+  created_at: string;
+  signed_url?: string;
+}
+
+export interface Mood {
+  id: string;
+  couple_id: string;
+  user_id: string;
+  mood: MoodEmoji;
+  note: string | null;
+  mood_date: string;
+  created_at: string;
+}
+
+export interface LoveMessage {
+  id: string;
+  couple_id: string;
+  sender_id: string;
+  type: LoveMessageType;
+  message: string | null;
+  created_at: string;
+  sender_profile?: Profile;
+}
+
+export interface BucketItem {
+  id: string;
+  couple_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  is_completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  couple_id: string;
+  created_by: string;
+  title: string;
+  description: string;
+  event_date: string;
+  image_url: string | null;
+  created_at: string;
+}
+
+export interface TimeCapsule {
+  id: string;
+  couple_id: string;
+  created_by: string;
+  title: string;
+  message?: string; // Optional if locked
+  unlock_at: string;
+  opened_at: string | null;
+  created_at: string;
+  is_locked?: boolean;
+}
+
+export interface GardenItem {
+  id: string;
+  couple_id: string;
+  item_type: string;
+  unlocked_by_event: string;
+  unlocked_at: string;
+  metadata?: Record<string, unknown>;
+}

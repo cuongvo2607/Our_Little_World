@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #FDFBF7;
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --text-primary: #2D2727;
+    --text-secondary: #7A7274;
+    --border-color: rgba(232, 160, 191, 0.25);
+  }
+
+  .dark {
+    --bg-primary: #141213;
+    --card-bg: rgba(30, 26, 28, 0.75);
+    --text-primary: #FDFBF7;
+    --text-secondary: #B0A7A9;
+    --border-color: rgba(212, 122, 157, 0.2);
+  }
+
+  * {
+    border-color: var(--border-color);
+  }
+
+  html, body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: none;
+  }
+}
+
+/* Glassmorphism utility */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+}
+
+/* Safe area insets for iOS devices */
+.pb-safe {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 20px));
+}
+
+.pt-safe {
+  padding-top: max(1rem, env(safe-area-inset-top, 20px));
+}
+
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(232, 160, 191, 0.3);
+  border-radius: 4px;
+}
