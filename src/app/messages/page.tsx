@@ -9,6 +9,7 @@ import { LoveMessage } from '@/types';
 import { Send, Plus, Smile, ArrowDown, Heart, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { registerUserActivity } from '@/lib/activity';
+import { createPartnerNotification } from '@/lib/notifications';
 
 const EMOJI_PRESETS = ['❤️', '🥰', '🫶', '🫂', '😘', '🌸', '✨', '🥺'];
 
@@ -249,6 +250,17 @@ export default function MessagesPage() {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? data : m))
         );
+
+        createPartnerNotification(
+          supabase,
+          type === 'custom' ? 'message' : 'quick_love',
+          type,
+          data.id
+        ).catch((notificationError) => {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[Notifications] Message notification skipped:', notificationError);
+          }
+        });
       }
     } catch (err) {
       console.error('Error sending message:', err);

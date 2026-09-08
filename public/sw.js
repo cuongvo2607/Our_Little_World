@@ -1,4 +1,4 @@
-const CACHE_NAME = 'our-little-world-v1';
+const CACHE_NAME = 'our-little-world-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -51,6 +51,57 @@ self.addEventListener('fetch', (event) => {
           return caches.match('/');
         }
       });
+    })
+  );
+});
+
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'Our Little World ❤️',
+    body: 'Bạn có một thông báo mới',
+    url: '/',
+  };
+
+  if (event.data) {
+    try {
+      payload = { ...payload, ...event.data.json() };
+    } catch (error) {
+      payload.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: payload.body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: {
+      url: payload.url || '/',
+      notificationId: payload.notificationId,
+    },
+    tag: payload.notificationId || undefined,
+    renotify: false,
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = new URL(event.notification.data?.url || '/', self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     })
   );
 });

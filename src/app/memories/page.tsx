@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { registerUserActivity } from '@/lib/activity';
+import { createPartnerNotification } from '@/lib/notifications';
 
 type UploadPhase = {
   active: boolean;
@@ -280,6 +281,7 @@ export default function MemoriesPage() {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser?.id || memory.created_by === authUser.id || recordedViewRef.current.has(memory.id)) return;
 
+    const wasAlreadyViewed = memory.memory_views?.some((view) => view.viewer_id === authUser.id);
     recordedViewRef.current.add(memory.id);
     const { error: rpcError } = await supabase.rpc('record_memory_view', {
       p_memory_id: memory.id,
@@ -298,6 +300,14 @@ export default function MemoriesPage() {
         console.error('Error recording memory view:', rpcError, insertError);
         return;
       }
+    }
+
+    if (!wasAlreadyViewed) {
+      createPartnerNotification(supabase, 'memory_viewed', null, memory.id).catch((notificationError) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[Notifications] Memory viewed notification skipped:', notificationError);
+        }
+      });
     }
 
     await fetchMemories();
@@ -400,6 +410,12 @@ export default function MemoriesPage() {
         .eq('id', memory.id);
 
       await registerUserActivity('memory', memory.id);
+
+      createPartnerNotification(supabase, 'memory_created', null, memory.id).catch((notificationError) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[Notifications] Memory notification skipped:', notificationError);
+        }
+      });
 
       resetForm();
       setIsAddModalOpen(false);

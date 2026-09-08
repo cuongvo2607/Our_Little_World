@@ -29,6 +29,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useCouple } from '@/context/CoupleContext';
 import { useMusic } from '@/context/MusicContext';
+import { createPartnerNotification } from '@/lib/notifications';
 import {
   createSongStoragePaths,
   formatMusicTime,
@@ -178,6 +179,12 @@ export function MiniMusicPlayer() {
       await supabase.storage.from(MUSIC_BUCKET).remove([paths.audioPath]);
       throw insertResult.error;
     }
+
+    createPartnerNotification(supabase, 'song_added', null, songId).catch((notificationError) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[Notifications] Song notification skipped:', notificationError);
+      }
+    });
 
     markDraft(draft.id, { status: 'done', error: undefined });
   };

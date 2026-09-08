@@ -4,6 +4,7 @@ import { PWAInstaller } from '@/components/navigation/PWAInstaller';
 import { AmbientBackground } from '@/components/ui/AmbientBackground';
 import { CoupleProvider } from '@/context/CoupleContext';
 import { MusicProvider } from '@/context/MusicContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 import { AppShell } from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
@@ -39,11 +40,13 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning>
       <body className="min-h-[100dvh] bg-cream-100 dark:bg-charcoal-900 text-charcoal-800 dark:text-cream-50 antialiased selection:bg-rose-200">
         <CoupleProvider>
-          <MusicProvider>
-            <PWAInstaller />
-            <AmbientBackground />
-            <AppShell>{children}</AppShell>
-          </MusicProvider>
+          <NotificationProvider>
+            <MusicProvider>
+              <PWAInstaller />
+              <AmbientBackground />
+              <AppShell>{children}</AppShell>
+            </MusicProvider>
+          </NotificationProvider>
         </CoupleProvider>
       </body>
     </html>

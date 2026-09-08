@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { PushNotificationSettings } from '@/context/NotificationContext';
 import { validateImageFile, compressImage } from '@/lib/image';
 import { getDaysTogether, formatDateVietnamese } from '@/lib/utils';
 import {
@@ -362,6 +363,8 @@ export default function ProfilePage() {
 
       {/* App Settings Menu */}
       <Card className="p-2 divide-y divide-rose-100 dark:divide-rose-900/30">
+        <PushNotificationSettings />
+
         <button
           onClick={toggleDarkMode}
           className="w-full flex items-center justify-between p-3 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 rounded-2xl transition-colors min-h-[44px]"

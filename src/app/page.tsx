@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { MemoryMediaGallery } from '@/components/ui/MemoryMediaGallery';
+import { NotificationBellButton } from '@/context/NotificationContext';
 import { fetchMemoriesWithOptionalRelations, MemoryWithMedia } from '@/lib/memoryMedia';
 import {
   calculateLoveDuration,
@@ -30,13 +31,13 @@ import {
   Clock,
   ChevronRight,
   Smile,
-  Bell,
   MapPin,
   Plus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { registerUserActivity } from '@/lib/activity';
+import { createPartnerNotification } from '@/lib/notifications';
 
 const MOOD_OPTIONS: { emoji: MoodEmoji; label: string }[] = [
   { emoji: '😭', label: 'Rất buồn' },
@@ -179,15 +180,27 @@ export default function HomePage() {
     triggerHeartConfetti();
 
     try {
-      await supabase.from('love_messages').insert({
-        couple_id: couple.id,
-        sender_id: user.id,
-        type,
-        message: label,
-      });
+      const { data: quickMessage, error: quickMessageError } = await supabase
+        .from('love_messages')
+        .insert({
+          couple_id: couple.id,
+          sender_id: user.id,
+          type,
+          message: label,
+        })
+        .select('id')
+        .single();
+
+      if (quickMessageError) throw quickMessageError;
 
       // Register Sunflower Streak activity
       await registerUserActivity('quick_message');
+
+      createPartnerNotification(supabase, 'quick_love', type, quickMessage?.id).catch((notificationError) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[Notifications] Quick love notification skipped:', notificationError);
+        }
+      });
 
       showToast(`Đã gửi "${label}" tới người ấy ❤️`);
     } catch (err) {
@@ -290,10 +303,7 @@ export default function HomePage() {
         </div>
 
         {/* Circular Bell Notification Glass Button */}
-        <button className="relative w-9.5 h-9.5 rounded-full bg-white/80 dark:bg-charcoal-800/80 border border-[rgba(232,109,145,0.18)] shadow-soft-sm text-[#E86D91] flex items-center justify-center active:scale-95 transition-transform">
-          <Bell className="w-4.5 h-4.5 text-[#302830] dark:text-cream-50" />
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#E86D91] ring-2 ring-white dark:ring-charcoal-900" />
-        </button>
+        <NotificationBellButton />
       </div>
 
       {/* 1. HEADER SECTION (COUPLE & AVATARS) */}

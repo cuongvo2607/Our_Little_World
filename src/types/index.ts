@@ -135,6 +135,32 @@ export interface GardenItem {
 
 export type ActivityType = 'message' | 'mood' | 'memory' | 'quick_message';
 
+export type NotificationType =
+  | 'quick_love'
+  | 'message'
+  | 'memory_created'
+  | 'memory_viewed'
+  | 'sunflower_watered'
+  | 'streak_completed'
+  | 'song_added'
+  | 'time_capsule_ready';
+
+export interface AppNotification {
+  id: string;
+  couple_id: string;
+  sender_id: string;
+  recipient_id: string;
+  type: NotificationType;
+  action_type: string | null;
+  reference_id: string | null;
+  title: string | null;
+  body: string | null;
+  url: string;
+  is_read: boolean;
+  push_sent_at: string | null;
+  created_at: string;
+}
+
 export interface DailyActivity {
   id: string;
   couple_id: string;
