@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { MemoryMediaGallery } from '@/components/ui/MemoryMediaGallery';
-import { MemoryWithMedia, normalizeMemoryRows, resolveMemoryMediaUrls } from '@/lib/memoryMedia';
+import { fetchMemoriesWithOptionalRelations, MemoryWithMedia } from '@/lib/memoryMedia';
 import {
   calculateLoveDuration,
   getDaysTogether,
@@ -143,19 +143,12 @@ export default function HomePage() {
       setTotalMemoriesCount(count || 0);
 
       // Fetch Recent Memories (up to 5 for carousel)
-      const { data: memoryData } = await supabase
-        .from('memories')
-        .select('*, memory_media(*)')
-        .eq('couple_id', coupleId)
-        .order('created_at', { ascending: false })
-        .order('sort_order', { foreignTable: 'memory_media', ascending: true })
-        .limit(5);
-
-      if (memoryData) {
-        // Parallel batch resolution of private media signed URLs. Videos render with metadata preload only.
-        const resolvedMemories = await resolveMemoryMediaUrls(supabase, normalizeMemoryRows(memoryData));
-        setRecentMemories(resolvedMemories);
-      }
+      const resolvedMemories = await fetchMemoriesWithOptionalRelations(supabase, coupleId, {
+        orderColumn: 'created_at',
+        limit: 5,
+        includeViews: false,
+      });
+      setRecentMemories(resolvedMemories);
 
       // Fetch Next Time Capsule
       const { data: capsuleData } = await supabase

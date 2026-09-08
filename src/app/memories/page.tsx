@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MemoryMediaGallery, MemoryMediaViewer } from '@/components/ui/MemoryMediaGallery';
 import {
   createMemoryStoragePath,
+  fetchMemoriesWithOptionalRelations,
   formatViewedAtTime,
   getReadableFileSize,
   getUploadBody,
@@ -17,9 +18,7 @@ import {
   MAX_MEMORY_VIDEO_BYTES,
   MEMORY_MEDIA_BUCKET,
   MemoryWithMedia,
-  normalizeMemoryRows,
   readMediaMetadata,
-  resolveMemoryMediaUrls,
   SelectedMemoryMedia,
   validateMemoryMediaFile,
 } from '@/lib/memoryMedia';
@@ -138,17 +137,11 @@ export default function MemoriesPage() {
 
       if (!member?.couple_id) return;
 
-      const { data, error } = await supabase
-        .from('memories')
-        .select('*, memory_media(*), memory_views(*)')
-        .eq('couple_id', member.couple_id)
-        .order('memory_date', { ascending: false })
-        .order('sort_order', { foreignTable: 'memory_media', ascending: true });
+      const resolved = await fetchMemoriesWithOptionalRelations(supabase, member.couple_id, {
+        orderColumn: 'memory_date',
+        includeViews: true,
+      });
 
-      if (error) throw error;
-
-      const normalized = normalizeMemoryRows(data);
-      const resolved = await resolveMemoryMediaUrls(supabase, normalized);
       setMemories(resolved);
 
       const openMemory = selectedMemoryRef.current;

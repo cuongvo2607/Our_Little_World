@@ -27,6 +27,13 @@ export type MemoryWithMedia = Memory & {
   cover_url?: string;
 };
 
+type FetchMemoryOptions = {
+  orderColumn?: 'memory_date' | 'created_at';
+  ascending?: boolean;
+  limit?: number;
+  includeViews?: boolean;
+};
+
 export function getReadableFileSize(bytes: number) {
   const mb = bytes / 1024 / 1024;
   return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
@@ -143,6 +150,53 @@ export async function resolveMemoryMediaUrls<T extends MemoryWithMedia>(
       };
     })
   );
+}
+
+export async function fetchMemoriesWithOptionalRelations(
+  supabase: SupabaseClient,
+  coupleId: string,
+  options: FetchMemoryOptions = {}
+): Promise<MemoryWithMedia[]> {
+  const orderColumn = options.orderColumn || 'memory_date';
+  const ascending = options.ascending ?? false;
+
+  async function runQuery(selectClause: string, includeMediaOrder: boolean) {
+    let query = supabase
+      .from('memories')
+      .select(selectClause)
+      .eq('couple_id', coupleId)
+      .order(orderColumn, { ascending });
+
+    if (includeMediaOrder) {
+      query = query.order('sort_order', { foreignTable: 'memory_media', ascending: true });
+    }
+
+    if (options.limit) {
+      query = query.limit(options.limit);
+    }
+
+    return query;
+  }
+
+  const attempts = [
+    options.includeViews === false ? null : { select: '*, memory_media(*), memory_views(*)', mediaOrder: true },
+    { select: '*, memory_media(*)', mediaOrder: true },
+    { select: '*', mediaOrder: false },
+  ].filter(Boolean) as { select: string; mediaOrder: boolean }[];
+
+  let lastError: unknown = null;
+
+  for (const attempt of attempts) {
+    const { data, error } = await runQuery(attempt.select, attempt.mediaOrder);
+    if (!error) {
+      return resolveMemoryMediaUrls(supabase, normalizeMemoryRows(data));
+    }
+
+    lastError = error;
+    console.warn('[Memories] Falling back after relation query failed:', error.message);
+  }
+
+  throw lastError;
 }
 
 export function normalizeMemoryRows(rows: any[] | null | undefined): MemoryWithMedia[] {
