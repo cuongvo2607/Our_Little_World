@@ -8,10 +8,11 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, headerAction, children }: ModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -34,12 +35,16 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
               <h3 className="text-lg font-semibold text-charcoal-800 dark:text-rose-100">
                 {title}
               </h3>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {headerAction}
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  aria-label="Đóng"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <div>{children}</div>
           </motion.div>

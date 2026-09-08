@@ -169,6 +169,7 @@ export function normalizeMemoryRows(rows: any[] | null | undefined): MemoryWithM
     return {
       ...row,
       media,
+      memory_views: Array.isArray(row.memory_views) ? row.memory_views : [],
     };
   });
 }
@@ -179,4 +180,15 @@ export function formatDuration(seconds: number | null | undefined) {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${minutes}:${rest.toString().padStart(2, '0')}`;
+}
+
+export function formatViewedAtTime(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }

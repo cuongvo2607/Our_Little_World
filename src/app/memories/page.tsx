@@ -3,12 +3,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { useCouple } from '@/context/CoupleContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { MemoryMediaGallery, MemoryMediaViewer } from '@/components/ui/MemoryMediaGallery';
 import {
   createMemoryStoragePath,
+  formatViewedAtTime,
   getReadableFileSize,
   getUploadBody,
   MAX_MEMORY_IMAGE_BYTES,
@@ -25,10 +27,13 @@ import { formatDateVietnamese } from '@/lib/utils';
 import { MemoryMedia } from '@/types';
 import {
   Calendar,
+  CheckCircle2,
+  Circle,
   ImagePlus,
   LayoutGrid,
   Loader2,
   MapPin,
+  MoreHorizontal,
   Plus,
   Sparkles,
   Square,
@@ -45,7 +50,46 @@ type UploadPhase = {
   message: string;
 };
 
+function MemorySeenStatus({
+  memory,
+  currentUserId,
+  partnerName,
+  partnerId,
+  compact = false,
+}: {
+  memory: MemoryWithMedia;
+  currentUserId?: string;
+  partnerName?: string;
+  partnerId?: string;
+  compact?: boolean;
+}) {
+  if (!currentUserId || memory.created_by !== currentUserId || !partnerId) return null;
+
+  const partnerView = memory.memory_views?.find((view) => view.viewer_id === partnerId);
+  const displayName = partnerName || 'Người ấy';
+
+  if (!partnerView) {
+    return (
+      <div className={`inline-flex items-center gap-1 text-[11px] font-medium ${compact ? 'text-rose-100/90' : 'text-[#81727B] dark:text-gray-400'}`}>
+        <Circle className="w-3 h-3" />
+        <span>{compact ? 'Chưa xem' : `${displayName} chưa xem`}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`inline-flex items-center gap-1 text-[11px] font-semibold ${compact ? 'text-emerald-100' : 'text-emerald-600 dark:text-emerald-300'}`}>
+      <CheckCircle2 className="w-3 h-3" />
+      <span>
+        {compact ? 'Đã xem' : `Đã xem bởi ${displayName}`}
+        {partnerView.viewed_at ? ` • ${formatViewedAtTime(partnerView.viewed_at)}` : ''}
+      </span>
+    </div>
+  );
+}
+
 export default function MemoriesPage() {
+  const { user, partnerProfile } = useCouple();
   const [memories, setMemories] = useState<MemoryWithMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'card'>('grid');
@@ -60,7 +104,13 @@ export default function MemoriesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedMemory, setSelectedMemory] = useState<MemoryWithMedia | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [isManageMenuOpen, setIsManageMenuOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const selectedMediaRef = useRef<SelectedMemoryMedia[]>([]);
+  const selectedMemoryRef = useRef<MemoryWithMedia | null>(null);
+  const recordedViewRef = useRef<Set<string>>(new Set());
 
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -69,6 +119,7 @@ export default function MemoriesPage() {
   const hasSelectedMedia = selectedMedia.length > 0;
   const imageLimitLabel = useMemo(() => getReadableFileSize(MAX_MEMORY_IMAGE_BYTES), []);
   const videoLimitLabel = useMemo(() => getReadableFileSize(MAX_MEMORY_VIDEO_BYTES), []);
+  const canManageSelectedMemory = !!selectedMemory && selectedMemory.created_by === user?.id;
 
   const fetchMemories = useCallback(async () => {
     setLoading(true);
@@ -89,7 +140,7 @@ export default function MemoriesPage() {
 
       const { data, error } = await supabase
         .from('memories')
-        .select('*, memory_media(*)')
+        .select('*, memory_media(*), memory_views(*)')
         .eq('couple_id', member.couple_id)
         .order('memory_date', { ascending: false })
         .order('sort_order', { foreignTable: 'memory_media', ascending: true });
@@ -99,6 +150,11 @@ export default function MemoriesPage() {
       const normalized = normalizeMemoryRows(data);
       const resolved = await resolveMemoryMediaUrls(supabase, normalized);
       setMemories(resolved);
+
+      const openMemory = selectedMemoryRef.current;
+      if (openMemory) {
+        setSelectedMemory(resolved.find((memory) => memory.id === openMemory.id) || null);
+      }
     } catch (err) {
       console.error('Error fetching memories:', err);
     } finally {
@@ -137,6 +193,11 @@ export default function MemoriesPage() {
           { event: '*', schema: 'public', table: 'memory_media', filter: `couple_id=eq.${member.couple_id}` },
           () => fetchMemories()
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'memory_views', filter: `couple_id=eq.${member.couple_id}` },
+          () => fetchMemories()
+        )
         .subscribe();
     }
 
@@ -152,6 +213,10 @@ export default function MemoriesPage() {
   useEffect(() => {
     selectedMediaRef.current = selectedMedia;
   }, [selectedMedia]);
+
+  useEffect(() => {
+    selectedMemoryRef.current = selectedMemory;
+  }, [selectedMemory]);
 
   useEffect(() => () => {
     selectedMediaRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
@@ -212,6 +277,28 @@ export default function MemoriesPage() {
   const setMediaStatus = (id: string, status: SelectedMemoryMedia['status'], error?: string) => {
     setSelectedMedia((items) => items.map((item) => item.id === id ? { ...item, status, error } : item));
   };
+
+  const handleOpenMemory = useCallback(async (memory: MemoryWithMedia) => {
+    setSelectedMemory(memory);
+    setIsManageMenuOpen(false);
+    setIsDeleteConfirmOpen(false);
+    setDeleteError(null);
+
+    if (!user?.id || memory.created_by === user.id || recordedViewRef.current.has(memory.id)) return;
+
+    recordedViewRef.current.add(memory.id);
+    const { error } = await supabase
+      .from('memory_views')
+      .upsert(
+        { memory_id: memory.id, couple_id: memory.couple_id, viewer_id: user.id },
+        { onConflict: 'memory_id,viewer_id', ignoreDuplicates: true }
+      );
+
+    if (error) {
+      recordedViewRef.current.delete(memory.id);
+      console.error('Error recording memory view:', error);
+    }
+  }, [supabase, user?.id]);
 
   const handleCreateMemory = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -331,8 +418,13 @@ export default function MemoriesPage() {
   };
 
   const handleDeleteMemory = async (memory: MemoryWithMedia) => {
-    if (!confirm('Xóa kỷ niệm này?')) return;
+    if (memory.created_by !== user?.id) {
+      setDeleteError('Chỉ người tạo kỷ niệm mới có thể xóa.');
+      return;
+    }
 
+    setDeleting(true);
+    setDeleteError(null);
     try {
       const storagePaths = memory.media.map((item) => item.storage_path).filter(Boolean);
       if (storagePaths.length > 0) {
@@ -341,12 +433,18 @@ export default function MemoriesPage() {
         await supabase.storage.from(MEMORY_MEDIA_BUCKET).remove([memory.image_url]);
       }
 
-      await supabase.from('memories').delete().eq('id', memory.id);
+      const { error } = await supabase.from('memories').delete().eq('id', memory.id);
+      if (error) throw error;
+
+      setIsDeleteConfirmOpen(false);
+      setIsManageMenuOpen(false);
       setSelectedMemory(null);
       await fetchMemories();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Không thể xóa kỷ niệm này. Thử lại nhé.');
+      setDeleteError(err?.message || 'Không thể xóa kỷ niệm. Vui lòng thử lại.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -430,13 +528,20 @@ export default function MemoriesPage() {
               }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => setSelectedMemory(memory)}
+              onClick={() => handleOpenMemory(memory)}
               className="relative h-48 rounded-[22px] overflow-hidden glass-card cursor-pointer group shadow-soft-sm hover:shadow-soft-lg transition-all text-left"
             >
               <MemoryMediaGallery media={memory.media} title={memory.title} layout="cover" priority={index < 2} />
               <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-3 text-white pointer-events-none">
                 <span className="text-[10px] text-rose-200">{formatDateVietnamese(memory.memory_date)}</span>
                 <h4 className="text-xs font-bold line-clamp-1">{memory.title}</h4>
+                <MemorySeenStatus
+                  memory={memory}
+                  currentUserId={user?.id}
+                  partnerId={partnerProfile?.id}
+                  partnerName={partnerProfile?.display_name}
+                  compact
+                />
               </div>
             </motion.button>
           ))}
@@ -460,7 +565,7 @@ export default function MemoriesPage() {
               }}
             >
               <Card
-                onClick={() => setSelectedMemory(memory)}
+                onClick={() => handleOpenMemory(memory)}
                 className="cursor-pointer space-y-3 hover:border-rose-300 transition-colors"
               >
                 <MemoryMediaGallery media={memory.media} title={memory.title} priority={index === 0} />
@@ -479,6 +584,14 @@ export default function MemoriesPage() {
                   {memory.description && (
                     <p className="text-xs text-gray-500 mt-1 line-clamp-2">{memory.description}</p>
                   )}
+                  <div className="mt-2">
+                    <MemorySeenStatus
+                      memory={memory}
+                      currentUserId={user?.id}
+                      partnerId={partnerProfile?.id}
+                      partnerName={partnerProfile?.display_name}
+                    />
+                  </div>
                 </div>
               </Card>
             </motion.div>
@@ -625,10 +738,103 @@ export default function MemoriesPage() {
       {selectedMemory && (
         <Modal
           isOpen={!!selectedMemory}
-          onClose={() => setSelectedMemory(null)}
+          onClose={() => {
+            setSelectedMemory(null);
+            setIsManageMenuOpen(false);
+            setIsDeleteConfirmOpen(false);
+            setDeleteError(null);
+          }}
           title="Kỷ niệm"
+          headerAction={
+            canManageSelectedMemory ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManageMenuOpen((value) => !value);
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteError(null);
+                }}
+                className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Quản lý kỷ niệm"
+              >
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+            ) : null
+          }
         >
           <div className="space-y-4">
+            {isManageMenuOpen && !isDeleteConfirmOpen && (
+              <div className="rounded-2xl border border-rose-100 dark:border-rose-900/30 bg-white/85 dark:bg-charcoal-800/95 shadow-soft-sm overflow-hidden">
+                <div className="px-4 py-3 text-sm font-semibold text-charcoal-800 dark:text-cream-50">
+                  Quản lý kỷ niệm
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteConfirmOpen(true);
+                    setDeleteError(null);
+                  }}
+                  className="w-full px-4 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Xóa kỷ niệm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsManageMenuOpen(false)}
+                  className="w-full px-4 py-3 text-left text-sm font-medium text-[#81727B] hover:bg-rose-50/70 dark:hover:bg-white/5"
+                >
+                  Hủy
+                </button>
+              </div>
+            )}
+
+            {isDeleteConfirmOpen && (
+              <div className="rounded-2xl border border-red-100 dark:border-red-900/40 bg-red-50/70 dark:bg-red-950/20 p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-charcoal-800 dark:text-cream-50">
+                    Xóa kỷ niệm này?
+                  </h3>
+                  <p className="text-sm font-semibold text-red-600 mt-1 line-clamp-2">
+                    {selectedMemory.title}
+                  </p>
+                  <p className="text-xs text-[#81727B] dark:text-gray-300 mt-2">
+                    Ảnh, video và nội dung của kỷ niệm này sẽ bị xóa.
+                  </p>
+                </div>
+
+                {deleteError && (
+                  <div className="rounded-xl bg-white/80 dark:bg-charcoal-800 px-3 py-2 text-xs text-red-600 dark:text-red-300">
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    autoFocus
+                    disabled={deleting}
+                    onClick={() => {
+                      setIsDeleteConfirmOpen(false);
+                      setDeleteError(null);
+                    }}
+                  >
+                    Giữ lại
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    isLoading={deleting}
+                    onClick={() => handleDeleteMemory(selectedMemory)}
+                  >
+                    Xóa kỷ niệm
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div>
               <h2 className="text-xl font-bold text-charcoal-800 dark:text-cream-50">
                 {selectedMemory.title}
@@ -657,14 +863,13 @@ export default function MemoriesPage() {
               </p>
             )}
 
-            <div className="pt-2 flex justify-end">
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => handleDeleteMemory(selectedMemory)}
-              >
-                <Trash2 className="w-4 h-4 mr-1" /> Xóa kỷ niệm
-              </Button>
+            <div className="pt-1">
+              <MemorySeenStatus
+                memory={selectedMemory}
+                currentUserId={user?.id}
+                partnerId={partnerProfile?.id}
+                partnerName={partnerProfile?.display_name}
+              />
             </div>
           </div>
         </Modal>

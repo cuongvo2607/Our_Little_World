@@ -40,6 +40,7 @@ export interface Memory {
   signed_url?: string;
   media?: MemoryMedia[];
   memory_media?: MemoryMedia[];
+  memory_views?: MemoryView[];
 }
 
 export type MemoryMediaType = 'image' | 'video';
@@ -58,6 +59,14 @@ export interface MemoryMedia {
   sort_order: number;
   created_at: string;
   signed_url?: string;
+}
+
+export interface MemoryView {
+  id: string;
+  memory_id: string;
+  couple_id: string;
+  viewer_id: string;
+  viewed_at: string;
 }
 
 export interface Mood {
