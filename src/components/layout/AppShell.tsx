@@ -7,6 +7,7 @@ import { RightPanel } from '@/components/navigation/RightPanel';
 import { BottomNav } from '@/components/navigation/BottomNav';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { FloatingSunflower } from '@/components/sunflower/FloatingSunflower';
+import { MiniMusicPlayer } from '@/components/music/MiniMusicPlayer';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -40,6 +41,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Floating Sunflower Button (Fixed right above BottomNav) */}
       <FloatingSunflower />
+
+      {/* Global Music Player (Fixed left, separate from Sunflower) */}
+      <MiniMusicPlayer />
 
       {/* Mobile Bottom Navigation (< 1024px) */}
       <BottomNav />
