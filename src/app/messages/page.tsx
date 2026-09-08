@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useCouple } from '@/context/CoupleContext';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +24,8 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
+  const shouldScrollAfterFetchRef = useRef(false);
+  const supabase = useMemo(() => createClient(), []);
   const quickTargetName = partnerProfile?.display_name?.trim() || 'người ấy';
   const missQuickLabel = `Nhớ ${quickTargetName}`;
   const loveQuickLabel = `Iu ${quickTargetName}`;
@@ -47,7 +48,7 @@ export default function MessagesPage() {
     setShowScrollBottomBtn(isFarFromBottom);
   };
 
-  // Fetch initial messages (50 most recent, ASC order: Oldest -> Newest)
+  // Fetch the 50 newest messages, then restore chat display order: oldest -> newest.
   const fetchMessages = useCallback(async () => {
     if (!couple?.id) return;
     setLoading(true);
@@ -56,12 +57,12 @@ export default function MessagesPage() {
         .from('love_messages')
         .select('*')
         .eq('couple_id', couple.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      setMessages(data || []);
-      scrollToBottom(false);
+      shouldScrollAfterFetchRef.current = true;
+      setMessages([...(data || [])].reverse());
     } catch (err) {
       console.error('Fetch messages error:', err);
     } finally {
@@ -72,6 +73,13 @@ export default function MessagesPage() {
   useEffect(() => {
     fetchMessages();
   }, [fetchMessages]);
+
+  useEffect(() => {
+    if (loading || !shouldScrollAfterFetchRef.current) return;
+
+    shouldScrollAfterFetchRef.current = false;
+    scrollToBottom(false);
+  }, [loading, messages.length, scrollToBottom]);
 
   // Subscribe to Realtime postgres_changes for love_messages (INSERT, UPDATE, DELETE)
   useEffect(() => {
