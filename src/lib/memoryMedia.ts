@@ -160,43 +160,65 @@ export async function fetchMemoriesWithOptionalRelations(
   const orderColumn = options.orderColumn || 'memory_date';
   const ascending = options.ascending ?? false;
 
-  async function runQuery(selectClause: string, includeMediaOrder: boolean) {
-    let query = supabase
-      .from('memories')
-      .select(selectClause)
-      .eq('couple_id', coupleId)
-      .order(orderColumn, { ascending });
+  let query = supabase
+    .from('memories')
+    .select('*')
+    .eq('couple_id', coupleId)
+    .order(orderColumn, { ascending });
 
-    if (includeMediaOrder) {
-      query = query.order('sort_order', { foreignTable: 'memory_media', ascending: true });
-    }
-
-    if (options.limit) {
-      query = query.limit(options.limit);
-    }
-
-    return query;
+  if (options.limit) {
+    query = query.limit(options.limit);
   }
 
-  const attempts = [
-    options.includeViews === false ? null : { select: '*, memory_media(*), memory_views(*)', mediaOrder: true },
-    { select: '*, memory_media(*)', mediaOrder: true },
-    { select: '*', mediaOrder: false },
-  ].filter(Boolean) as { select: string; mediaOrder: boolean }[];
+  const { data: memoryRows, error: memoryError } = await query;
+  if (memoryError) throw memoryError;
 
-  let lastError: unknown = null;
+  const memoryIds = (memoryRows || []).map((memory) => memory.id);
+  if (memoryIds.length === 0) return [];
 
-  for (const attempt of attempts) {
-    const { data, error } = await runQuery(attempt.select, attempt.mediaOrder);
-    if (!error) {
-      return resolveMemoryMediaUrls(supabase, normalizeMemoryRows(data));
-    }
+  const [mediaResult, viewsResult] = await Promise.all([
+    supabase
+      .from('memory_media')
+      .select('*')
+      .in('memory_id', memoryIds)
+      .order('sort_order', { ascending: true }),
+    options.includeViews === false
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+          .from('memory_views')
+          .select('*')
+          .in('memory_id', memoryIds),
+  ]);
 
-    lastError = error;
-    console.warn('[Memories] Falling back after relation query failed:', error.message);
+  if (mediaResult.error) {
+    console.warn('[Memories] memory_media unavailable, using legacy image_url fallback:', mediaResult.error.message);
   }
 
-  throw lastError;
+  if (viewsResult.error) {
+    console.warn('[Memories] memory_views unavailable, read receipts will be hidden:', viewsResult.error.message);
+  }
+
+  const mediaByMemory = new Map<string, any[]>();
+  (mediaResult.data || []).forEach((item: any) => {
+    const items = mediaByMemory.get(item.memory_id) || [];
+    items.push(item);
+    mediaByMemory.set(item.memory_id, items);
+  });
+
+  const viewsByMemory = new Map<string, any[]>();
+  (viewsResult.data || []).forEach((item: any) => {
+    const items = viewsByMemory.get(item.memory_id) || [];
+    items.push(item);
+    viewsByMemory.set(item.memory_id, items);
+  });
+
+  const joinedRows = (memoryRows || []).map((memory) => ({
+    ...memory,
+    memory_media: mediaByMemory.get(memory.id) || [],
+    memory_views: viewsByMemory.get(memory.id) || [],
+  }));
+
+  return resolveMemoryMediaUrls(supabase, normalizeMemoryRows(joinedRows));
 }
 
 export function normalizeMemoryRows(rows: any[] | null | undefined): MemoryWithMedia[] {

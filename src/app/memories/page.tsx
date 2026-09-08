@@ -277,21 +277,31 @@ export default function MemoriesPage() {
     setIsDeleteConfirmOpen(false);
     setDeleteError(null);
 
-    if (!user?.id || memory.created_by === user.id || recordedViewRef.current.has(memory.id)) return;
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser?.id || memory.created_by === authUser.id || recordedViewRef.current.has(memory.id)) return;
 
     recordedViewRef.current.add(memory.id);
-    const { error } = await supabase
-      .from('memory_views')
-      .upsert(
-        { memory_id: memory.id, couple_id: memory.couple_id, viewer_id: user.id },
-        { onConflict: 'memory_id,viewer_id', ignoreDuplicates: true }
-      );
+    const { error: rpcError } = await supabase.rpc('record_memory_view', {
+      p_memory_id: memory.id,
+    });
 
-    if (error) {
-      recordedViewRef.current.delete(memory.id);
-      console.error('Error recording memory view:', error);
+    if (rpcError) {
+      const { error: insertError } = await supabase
+        .from('memory_views')
+        .upsert(
+          { memory_id: memory.id, couple_id: memory.couple_id, viewer_id: authUser.id },
+          { onConflict: 'memory_id,viewer_id', ignoreDuplicates: true }
+        );
+
+      if (insertError) {
+        recordedViewRef.current.delete(memory.id);
+        console.error('Error recording memory view:', rpcError, insertError);
+        return;
+      }
     }
-  }, [supabase, user?.id]);
+
+    await fetchMemories();
+  }, [fetchMemories, supabase]);
 
   const handleCreateMemory = async (event: React.FormEvent) => {
     event.preventDefault();
