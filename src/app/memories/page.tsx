@@ -1,54 +1,76 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { MemoryImage } from '@/components/ui/MemoryImage';
-import { batchResolveStorageUrls } from '@/lib/storage';
-import { validateImageFile, compressImage } from '@/lib/image';
-import { formatDateVietnamese } from '@/lib/utils';
-import { Memory } from '@/types';
+import { MemoryMediaGallery, MemoryMediaViewer } from '@/components/ui/MemoryMediaGallery';
 import {
-  Plus,
-  LayoutGrid,
-  Square,
-  Upload,
+  createMemoryStoragePath,
+  getReadableFileSize,
+  getUploadBody,
+  MAX_MEMORY_IMAGE_BYTES,
+  MAX_MEMORY_VIDEO_BYTES,
+  MEMORY_MEDIA_BUCKET,
+  MemoryWithMedia,
+  normalizeMemoryRows,
+  readMediaMetadata,
+  resolveMemoryMediaUrls,
+  SelectedMemoryMedia,
+  validateMemoryMediaFile,
+} from '@/lib/memoryMedia';
+import { formatDateVietnamese } from '@/lib/utils';
+import { MemoryMedia } from '@/types';
+import {
   Calendar,
-  X,
-  Trash2,
+  ImagePlus,
+  LayoutGrid,
+  Loader2,
+  MapPin,
+  Plus,
   Sparkles,
+  Square,
+  Trash2,
+  Upload,
+  Video,
+  X,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { registerUserActivity } from '@/lib/activity';
 
+type UploadPhase = {
+  active: boolean;
+  message: string;
+};
+
 export default function MemoriesPage() {
-  const [memories, setMemories] = useState<(Memory & { signed_url?: string })[]>([]);
+  const [memories, setMemories] = useState<MemoryWithMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'card'>('grid');
-
-  // Add Memory Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [memoryDate, setMemoryDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [location, setLocation] = useState('');
+  const [selectedMedia, setSelectedMedia] = useState<SelectedMemoryMedia[]>([]);
   const [uploading, setUploading] = useState(false);
-
-  // Detail view modal
-  const [selectedMemory, setSelectedMemory] = useState<(Memory & { signed_url?: string }) | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>({ active: false, message: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [selectedMemory, setSelectedMemory] = useState<MemoryWithMedia | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const selectedMediaRef = useRef<SelectedMemoryMedia[]>([]);
 
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    fetchMemories();
-  }, []);
+  const selectedMemoryMedia = selectedMemory?.media || [];
+  const hasSelectedMedia = selectedMedia.length > 0;
+  const imageLimitLabel = useMemo(() => getReadableFileSize(MAX_MEMORY_IMAGE_BYTES), []);
+  const videoLimitLabel = useMemo(() => getReadableFileSize(MAX_MEMORY_VIDEO_BYTES), []);
 
-  const fetchMemories = async () => {
+  const fetchMemories = useCallback(async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -63,51 +85,35 @@ export default function MemoriesPage() {
         .eq('user_id', user.id)
         .single();
 
-      if (!member) return;
+      if (!member?.couple_id) return;
 
       const { data, error } = await supabase
         .from('memories')
-        .select('*')
+        .select('*, memory_media(*)')
         .eq('couple_id', member.couple_id)
-        .order('memory_date', { ascending: false });
+        .order('memory_date', { ascending: false })
+        .order('sort_order', { foreignTable: 'memory_media', ascending: true });
 
       if (error) throw error;
 
-      // Transform signed URLs in parallel if bucket is private
-      if (data) {
-        const withUrls = await batchResolveStorageUrls(supabase, data);
-        setMemories(withUrls);
-      }
+      const normalized = normalizeMemoryRows(data);
+      const resolved = await resolveMemoryMediaUrls(supabase, normalized);
+      setMemories(resolved);
     } catch (err) {
       console.error('Error fetching memories:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, supabase]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    fetchMemories();
+  }, [fetchMemories]);
 
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      alert(validation.error);
-      return;
-    }
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    setSelectedFile(file);
-    setImagePreview(URL.createObjectURL(file));
-  };
-
-  const handleCreateMemory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile) {
-      alert('Vui lòng chọn 1 tấm ảnh kỷ niệm');
-      return;
-    }
-
-    setUploading(true);
-    try {
+    async function subscribeToMemoryChanges() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -117,209 +123,361 @@ export default function MemoriesPage() {
         .eq('user_id', user.id)
         .single();
 
-      if (!member) return;
+      if (!member?.couple_id) return;
 
-      // 1. Compress image before uploading
-      const compressedBlob = await compressImage(selectedFile);
-      const fileExt = selectedFile.name.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `couples/${member.couple_id}/${fileName}`;
+      channel = supabase
+        .channel(`memories-page-${member.couple_id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'memories', filter: `couple_id=eq.${member.couple_id}` },
+          () => fetchMemories()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'memory_media', filter: `couple_id=eq.${member.couple_id}` },
+          () => fetchMemories()
+        )
+        .subscribe();
+    }
 
-      // 2. Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('couple-memories')
-        .upload(filePath, compressedBlob, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
+    subscribeToMemoryChanges();
 
-      if (uploadError) throw uploadError;
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [fetchMemories, supabase]);
 
-      // 3. Create DB Record
-      const { error: dbError } = await supabase.from('memories').insert({
-        couple_id: member.couple_id,
-        created_by: user.id,
-        title,
-        description,
-        memory_date: memoryDate,
-        image_url: filePath,
+  useEffect(() => {
+    selectedMediaRef.current = selectedMedia;
+  }, [selectedMedia]);
+
+  useEffect(() => () => {
+    selectedMediaRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+  }, []);
+
+  const resetForm = () => {
+    selectedMedia.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setTitle('');
+    setDescription('');
+    setLocation('');
+    setMemoryDate(new Date().toISOString().split('T')[0]);
+    setSelectedMedia([]);
+    setFormError(null);
+    setUploadPhase({ active: false, message: '' });
+  };
+
+  const handleMediaSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (files.length === 0) return;
+
+    const nextItems: SelectedMemoryMedia[] = [];
+
+    for (const file of files) {
+      const validation = validateMemoryMediaFile(file);
+      if (!validation.valid || !validation.mediaType) {
+        setFormError(validation.error || 'Không thể chọn tệp này.');
+        continue;
+      }
+
+      const metadata = await readMediaMetadata(file, validation.mediaType);
+      nextItems.push({
+        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: metadata.previewUrl,
+        mediaType: validation.mediaType,
+        width: metadata.width,
+        height: metadata.height,
+        durationSeconds: metadata.durationSeconds,
+        status: 'pending',
       });
+    }
 
-      if (dbError) throw dbError;
-
-      // Register Sunflower Streak activity
-      await registerUserActivity('memory');
-
-      // Reset form
-      setTitle('');
-      setDescription('');
-      setSelectedFile(null);
-      setImagePreview(null);
-      setIsAddModalOpen(false);
-      fetchMemories();
-    } catch (err: any) {
-      alert(err.message || 'Lỗi khi lưu kỷ niệm');
-    } finally {
-      setUploading(false);
+    if (nextItems.length > 0) {
+      setSelectedMedia((items) => [...items, ...nextItems]);
+      setFormError(null);
     }
   };
 
-  const handleDeleteMemory = async (memory: Memory) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa kỷ niệm này?')) return;
+  const removeSelectedMedia = (id: string) => {
+    setSelectedMedia((items) => {
+      const item = items.find((mediaItem) => mediaItem.id === id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return items.filter((mediaItem) => mediaItem.id !== id);
+    });
+  };
+
+  const setMediaStatus = (id: string, status: SelectedMemoryMedia['status'], error?: string) => {
+    setSelectedMedia((items) => items.map((item) => item.id === id ? { ...item, status, error } : item));
+  };
+
+  const handleCreateMemory = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (uploading) return;
+
+    if (!hasSelectedMedia) {
+      setFormError('Hãy chọn ít nhất một ảnh hoặc video cho kỷ niệm này.');
+      return;
+    }
+
+    setUploading(true);
+    setFormError(null);
+    setUploadPhase({ active: true, message: 'Đang lưu kỷ niệm... ❤️' });
+
+    const uploadedPaths: string[] = [];
+    let createdMemoryId: string | null = null;
+
     try {
-      // Remove storage image
-      if (memory.image_url.startsWith('couples/')) {
-        await supabase.storage.from('couple-memories').remove([memory.image_url]);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Bạn cần đăng nhập để tạo kỷ niệm.');
+
+      const { data: member } = await supabase
+        .from('couple_members')
+        .select('couple_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!member?.couple_id) throw new Error('Không tìm thấy couple của bạn.');
+
+      const { data: memory, error: memoryError } = await supabase
+        .from('memories')
+        .insert({
+          couple_id: member.couple_id,
+          created_by: user.id,
+          title,
+          description: description || null,
+          memory_date: memoryDate,
+          location: location || null,
+          image_url: null,
+        })
+        .select('*')
+        .single();
+
+      if (memoryError) throw memoryError;
+      createdMemoryId = memory.id;
+
+      const mediaRows: Omit<MemoryMedia, 'id' | 'created_at' | 'signed_url'>[] = [];
+
+      for (let index = 0; index < selectedMedia.length; index += 1) {
+        const item = selectedMedia[index];
+        const label = item.mediaType === 'video' ? `Video ${index + 1}` : `Ảnh ${index + 1}`;
+        setUploadPhase({ active: true, message: `Đang tải lên ${label}...` });
+        setMediaStatus(item.id, 'uploading');
+
+        const path = createMemoryStoragePath(member.couple_id, memory.id, item.file, item.mediaType);
+        const uploadBody = await getUploadBody(item.file, item.mediaType);
+
+        const { error: uploadError } = await supabase.storage
+          .from(MEMORY_MEDIA_BUCKET)
+          .upload(path, uploadBody.body, {
+            contentType: uploadBody.contentType,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          setMediaStatus(item.id, 'error', uploadError.message);
+          throw new Error(`Không thể tải ${item.mediaType === 'video' ? 'video' : 'ảnh'} lên.\nThử lại`);
+        }
+
+        uploadedPaths.push(path);
+        setMediaStatus(item.id, 'done');
+
+        mediaRows.push({
+          memory_id: memory.id,
+          couple_id: member.couple_id,
+          storage_path: path,
+          media_type: item.mediaType,
+          mime_type: uploadBody.contentType,
+          file_size: uploadBody.body.size,
+          width: item.width,
+          height: item.height,
+          duration_seconds: item.durationSeconds,
+          sort_order: index,
+        });
       }
-      // Remove DB row
+
+      const { error: mediaError } = await supabase
+        .from('memory_media')
+        .insert(mediaRows);
+
+      if (mediaError) throw mediaError;
+
+      await supabase
+        .from('memories')
+        .update({ image_url: mediaRows[0]?.storage_path || null })
+        .eq('id', memory.id);
+
+      await registerUserActivity('memory', memory.id);
+
+      resetForm();
+      setIsAddModalOpen(false);
+      await fetchMemories();
+    } catch (err: any) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from(MEMORY_MEDIA_BUCKET).remove(uploadedPaths);
+      }
+
+      if (createdMemoryId) {
+        await supabase.from('memories').delete().eq('id', createdMemoryId);
+      }
+
+      setFormError(err?.message || 'Không thể lưu kỷ niệm. Thử lại nhé.');
+    } finally {
+      setUploading(false);
+      setUploadPhase({ active: false, message: '' });
+    }
+  };
+
+  const handleDeleteMemory = async (memory: MemoryWithMedia) => {
+    if (!confirm('Xóa kỷ niệm này?')) return;
+
+    try {
+      const storagePaths = memory.media.map((item) => item.storage_path).filter(Boolean);
+      if (storagePaths.length > 0) {
+        await supabase.storage.from(MEMORY_MEDIA_BUCKET).remove(storagePaths);
+      } else if (memory.image_url?.startsWith('couples/')) {
+        await supabase.storage.from(MEMORY_MEDIA_BUCKET).remove([memory.image_url]);
+      }
+
       await supabase.from('memories').delete().eq('id', memory.id);
       setSelectedMemory(null);
-      fetchMemories();
+      await fetchMemories();
     } catch (err) {
       console.error(err);
+      alert('Không thể xóa kỷ niệm này. Thử lại nhé.');
     }
   };
 
   return (
-    <div className="space-y-4 py-2">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-4 py-2 pb-[calc(env(safe-area-inset-bottom)+96px)]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-charcoal-800 dark:text-cream-50 flex items-center gap-2">
-            Kỷ Niệm Của Chúng Ta <Sparkles className="w-5 h-5 text-rose-400" />
+            Kỷ niệm của chúng ta <Sparkles className="w-5 h-5 text-rose-400" />
           </h1>
-          <p className="text-xs text-gray-500">Lưu giữ từng khoảnh khắc đáng nhớ</p>
+          <p className="text-xs text-gray-500">Lưu giữ từng ảnh, từng video đáng nhớ</p>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <div className="flex bg-rose-50 dark:bg-rose-950/40 p-1 rounded-xl">
             <button
+              type="button"
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg min-h-[36px] min-w-[36px] flex items-center justify-center ${
                 viewMode === 'grid' ? 'bg-white dark:bg-charcoal-800 text-rose-600 shadow-soft-sm' : 'text-gray-400'
               }`}
+              aria-label="Xem dạng lưới"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('card')}
               className={`p-1.5 rounded-lg min-h-[36px] min-w-[36px] flex items-center justify-center ${
                 viewMode === 'card' ? 'bg-white dark:bg-charcoal-800 text-rose-600 shadow-soft-sm' : 'text-gray-400'
               }`}
+              aria-label="Xem dạng card"
             >
               <Square className="w-4 h-4" />
             </button>
           </div>
 
           <Button onClick={() => setIsAddModalOpen(true)} size="sm">
-            <Plus className="w-4 h-4 mr-1" /> Thêm
+            <Plus className="w-4 h-4 mr-1" /> Tạo
           </Button>
         </div>
       </div>
 
-      {/* Loading State */}
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-xs text-gray-400">Đang tải kho ảnh kỷ niệm...</p>
+          <Loader2 className="w-6 h-6 animate-spin mx-auto text-rose-400 mb-2" />
+          <p className="text-xs text-gray-400">Đang tải kho kỷ niệm...</p>
         </div>
       ) : memories.length === 0 ? (
-        /* Empty State */
         <Card className="text-center py-12 space-y-3">
           <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-400">
             <Sparkles className="w-8 h-8" />
           </div>
           <h3 className="text-sm font-semibold text-charcoal-800 dark:text-cream-50">
-            Chưa có kỷ niệm nào
+            Chúng mình chưa có kỷ niệm nào
           </h3>
           <p className="text-xs text-gray-400 max-w-xs mx-auto">
-            Hãy thêm khoảnh khắc đáng nhớ đầu tiên của hai bạn nhé ❤️
+            Hãy lưu lại khoảnh khắc đầu tiên.
           </p>
           <Button onClick={() => setIsAddModalOpen(true)} size="sm">
-            + Thêm kỷ niệm đầu tiên
+            <Plus className="w-4 h-4 mr-1" /> Thêm kỷ niệm đầu tiên
           </Button>
         </Card>
       ) : viewMode === 'grid' ? (
-        /* Grid Gallery View with Stagger Animation */
         <motion.div
           initial="hidden"
           animate="show"
           variants={{
             hidden: { opacity: 0 },
-            show: {
-              opacity: 1,
-              transition: { staggerChildren: 0.06 },
-            },
+            show: { opacity: 1, transition: { staggerChildren: 0.06 } },
           }}
           className="grid grid-cols-2 gap-3"
         >
-          {memories.map((mem, index) => (
-            <motion.div
-              key={mem.id}
+          {memories.map((memory, index) => (
+            <motion.button
+              type="button"
+              key={memory.id}
               variants={{
                 hidden: { opacity: 0, y: 15, scale: 0.95 },
                 show: { opacity: 1, y: 0, scale: 1 },
               }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => setSelectedMemory(mem)}
-              className="relative h-44 rounded-2xl overflow-hidden glass-card cursor-pointer group shadow-soft-sm hover:shadow-soft-lg transition-all"
+              onClick={() => setSelectedMemory(memory)}
+              className="relative h-48 rounded-[22px] overflow-hidden glass-card cursor-pointer group shadow-soft-sm hover:shadow-soft-lg transition-all text-left"
             >
-              <MemoryImage
-                src={mem.signed_url || mem.image_url}
-                alt={mem.title}
-                priority={index < 2}
-                aspectRatio="h-full w-full"
-              />
-              <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white">
-                <span className="text-[10px] text-rose-200">{formatDateVietnamese(mem.memory_date)}</span>
-                <h4 className="text-xs font-bold line-clamp-1">{mem.title}</h4>
+              <MemoryMediaGallery media={memory.media} title={memory.title} layout="cover" priority={index < 2} />
+              <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-transparent flex flex-col justify-end p-3 text-white pointer-events-none">
+                <span className="text-[10px] text-rose-200">{formatDateVietnamese(memory.memory_date)}</span>
+                <h4 className="text-xs font-bold line-clamp-1">{memory.title}</h4>
               </div>
-            </motion.div>
+            </motion.button>
           ))}
         </motion.div>
       ) : (
-        /* Card Timeline View */
         <motion.div
           initial="hidden"
           animate="show"
           variants={{
             hidden: { opacity: 0 },
-            show: {
-              opacity: 1,
-              transition: { staggerChildren: 0.08 },
-            },
+            show: { opacity: 1, transition: { staggerChildren: 0.08 } },
           }}
           className="space-y-4"
         >
-          {memories.map((mem, index) => (
+          {memories.map((memory, index) => (
             <motion.div
-              key={mem.id}
+              key={memory.id}
               variants={{
                 hidden: { opacity: 0, y: 15 },
                 show: { opacity: 1, y: 0 },
               }}
             >
               <Card
-                onClick={() => setSelectedMemory(mem)}
+                onClick={() => setSelectedMemory(memory)}
                 className="cursor-pointer space-y-3 hover:border-rose-300 transition-colors"
               >
-                <div className="rounded-2xl overflow-hidden">
-                  <MemoryImage
-                    src={mem.signed_url || mem.image_url}
-                    alt={mem.title}
-                    priority={index === 0}
-                    aspectRatio="aspect-[16/9]"
-                  />
-                </div>
+                <MemoryMediaGallery media={memory.media} title={memory.title} priority={index === 0} />
                 <div>
                   <span className="text-xs text-rose-500 font-medium">
-                    {formatDateVietnamese(mem.memory_date)}
+                    {formatDateVietnamese(memory.memory_date)}
                   </span>
                   <h3 className="text-base font-bold text-charcoal-800 dark:text-cream-50">
-                    {mem.title}
+                    {memory.title}
                   </h3>
-                  {mem.description && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{mem.description}</p>
+                  {memory.location && (
+                    <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-rose-400" /> {memory.location}
+                    </p>
+                  )}
+                  {memory.description && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{memory.description}</p>
                   )}
                 </div>
               </Card>
@@ -328,121 +486,176 @@ export default function MemoriesPage() {
         </motion.div>
       )}
 
-      {/* Add Memory Modal */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Thêm Kỷ Niệm Mới ❤️"
+        onClose={() => {
+          if (!uploading) {
+            setIsAddModalOpen(false);
+            resetForm();
+          }
+        }}
+        title="Tạo kỷ niệm mới"
       >
-        <form onSubmit={handleCreateMemory} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Ảnh kỷ niệm
-            </label>
-            {imagePreview ? (
-              <div className="relative h-44 rounded-2xl overflow-hidden group">
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setImagePreview(null);
-                  }}
-                  className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full min-h-[36px] min-w-[36px] flex items-center justify-center"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center h-36 border-2 border-dashed border-rose-200 dark:border-rose-900/40 rounded-2xl cursor-pointer hover:bg-rose-50/50 transition-colors">
-                <Upload className="w-8 h-8 text-rose-400 mb-1" />
-                <span className="text-xs font-medium text-rose-500">Bấm để tải ảnh lên</span>
-                <span className="text-[10px] text-gray-400 mt-0.5">JPEG, PNG, WEBP tối đa 10MB</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+        <form onSubmit={handleCreateMemory} className="space-y-4 pb-[env(safe-area-inset-bottom)]">
+          <label className="block">
+            <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
               Tiêu đề
-            </label>
+            </span>
             <input
               type="text"
               required
-              placeholder="Ví dụ: Chuyến đi Đà Lạt đầu tiên 🌲"
+              placeholder="Kỷ niệm đi Đà Lạt ❤️"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
               className="w-full px-4 py-2.5 text-sm bg-white/70 dark:bg-charcoal-800/70 border border-rose-100 dark:border-rose-900/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-300 text-charcoal-800 dark:text-cream-50"
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Ngày kỷ niệm
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Ngày kỷ niệm
+              </span>
+              <div className="relative">
+                <Calendar className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  required
+                  value={memoryDate}
+                  onChange={(event) => setMemoryDate(event.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-white/70 dark:bg-charcoal-800/70 border border-rose-100 dark:border-rose-900/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-300 text-charcoal-800 dark:text-cream-50"
+                />
+              </div>
             </label>
-            <div className="relative">
-              <Calendar className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+
+            <label className="block">
+              <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Địa điểm
+              </span>
               <input
-                type="date"
-                required
-                value={memoryDate}
-                onChange={(e) => setMemoryDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-white/70 dark:bg-charcoal-800/70 border border-rose-100 dark:border-rose-900/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-300 text-charcoal-800 dark:text-cream-50"
+                type="text"
+                placeholder="Đà Lạt"
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                className="w-full px-4 py-2.5 text-sm bg-white/70 dark:bg-charcoal-800/70 border border-rose-100 dark:border-rose-900/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-300 text-charcoal-800 dark:text-cream-50"
               />
-            </div>
+            </label>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Ghi chú / Cảm xúc
-            </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Mô tả
+            </span>
             <textarea
               rows={3}
-              placeholder="Viết vài dòng cảm nhận..."
+              placeholder="Hôm đó vui ghê ❤️"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(event) => setDescription(event.target.value)}
               className="w-full px-4 py-2.5 text-sm bg-white/70 dark:bg-charcoal-800/70 border border-rose-100 dark:border-rose-900/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-300 text-charcoal-800 dark:text-cream-50 resize-none"
             />
+          </label>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Ảnh và video</span>
+              <span className="text-[10px] text-gray-400">Ảnh {imageLimitLabel}, video {videoLimitLabel}</span>
+            </div>
+
+            {selectedMedia.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                {selectedMedia.map((item, index) => (
+                  <div key={item.id} className="relative aspect-square rounded-2xl overflow-hidden bg-rose-50 dark:bg-charcoal-800">
+                    {item.mediaType === 'video' ? (
+                      <video src={item.previewUrl} preload="metadata" playsInline muted className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={item.previewUrl} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                    )}
+                    <div className="absolute left-2 bottom-2 z-20 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white">
+                      {item.mediaType === 'video' ? <Video className="w-3 h-3" /> : <ImagePlus className="w-3 h-3" />}
+                      {item.status === 'done' ? '✓' : item.status === 'uploading' ? 'Đang tải' : item.mediaType === 'video' ? 'Video' : 'Ảnh'}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => removeSelectedMedia(item.id)}
+                      className="absolute right-2 top-2 z-20 min-h-[34px] min-w-[34px] rounded-full bg-black/60 text-white flex items-center justify-center disabled:opacity-50"
+                      aria-label="Xóa media"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className="flex flex-col items-center justify-center min-h-32 border-2 border-dashed border-rose-200 dark:border-rose-900/40 rounded-2xl cursor-pointer hover:bg-rose-50/50 transition-colors px-4 text-center">
+              <Upload className="w-8 h-8 text-rose-400 mb-1" />
+              <span className="text-xs font-semibold text-rose-500">Thêm ảnh hoặc video</span>
+              <span className="text-[10px] text-gray-400 mt-0.5">JPEG, PNG, WEBP, MP4, WEBM, MOV</span>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleMediaSelect}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
           </div>
 
-          <Button type="submit" className="w-full" isLoading={uploading}>
-            Lưu khoảnh khắc ❤️
+          {formError && (
+            <div className="rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 px-3 py-2 text-xs text-red-600 dark:text-red-300 whitespace-pre-line">
+              {formError}
+            </div>
+          )}
+
+          {uploadPhase.active && (
+            <div className="rounded-2xl bg-rose-50 dark:bg-rose-950/30 px-3 py-2 text-xs text-rose-600 dark:text-rose-200 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {uploadPhase.message}
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" isLoading={uploading} disabled={!hasSelectedMedia || uploading}>
+            Đăng kỷ niệm
           </Button>
         </form>
       </Modal>
 
-      {/* Memory Detail Fullscreen View Modal */}
       {selectedMemory && (
         <Modal
           isOpen={!!selectedMemory}
           onClose={() => setSelectedMemory(null)}
-          title={selectedMemory.title}
+          title="Kỷ niệm"
         >
           <div className="space-y-4">
-            <div className="rounded-2xl overflow-hidden max-h-[60vh]">
-              <img
-                src={selectedMemory.signed_url || selectedMemory.image_url}
-                alt={selectedMemory.title}
-                className="w-full h-full object-contain"
-              />
-            </div>
-
             <div>
-              <p className="text-xs text-rose-500 font-medium">
-                📅 {formatDateVietnamese(selectedMemory.memory_date)}
+              <h2 className="text-xl font-bold text-charcoal-800 dark:text-cream-50">
+                {selectedMemory.title}
+              </h2>
+              <p className="text-xs text-rose-500 font-medium mt-1">
+                {formatDateVietnamese(selectedMemory.memory_date)}
               </p>
-              {selectedMemory.description && (
-                <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 leading-relaxed whitespace-pre-wrap">
-                  {selectedMemory.description}
+              {selectedMemory.location && (
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-rose-400" /> {selectedMemory.location}
                 </p>
               )}
             </div>
+
+            <MemoryMediaGallery
+              media={selectedMemory.media}
+              title={selectedMemory.title}
+              layout="detail"
+              priority
+              onOpen={(index) => setViewerIndex(index)}
+            />
+
+            {selectedMemory.description && (
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                {selectedMemory.description}
+              </p>
+            )}
 
             <div className="pt-2 flex justify-end">
               <Button
@@ -455,6 +668,16 @@ export default function MemoriesPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {viewerIndex !== null && selectedMemoryMedia.length > 0 && (
+        <MemoryMediaViewer
+          media={selectedMemoryMedia}
+          title={selectedMemory?.title || 'Kỷ niệm'}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
       )}
     </div>
   );

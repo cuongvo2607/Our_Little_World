@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { MemoryImage } from '@/components/ui/MemoryImage';
-import { batchResolveStorageUrls } from '@/lib/storage';
+import { MemoryMediaGallery } from '@/components/ui/MemoryMediaGallery';
+import { MemoryWithMedia, normalizeMemoryRows, resolveMemoryMediaUrls } from '@/lib/memoryMedia';
 import {
   calculateLoveDuration,
   getDaysTogether,
@@ -19,7 +19,6 @@ import {
 import {
   Mood,
   MoodEmoji,
-  Memory,
   TimeCapsule,
 } from '@/types';
 import {
@@ -104,7 +103,7 @@ export default function HomePage() {
   const { user, userProfile, partnerProfile, couple, partnerMood, myMood, loading: contextLoading, refreshData } = useCouple();
 
   const [mounted, setMounted] = useState(false);
-  const [recentMemories, setRecentMemories] = useState<(Memory & { signed_url?: string })[]>([]);
+  const [recentMemories, setRecentMemories] = useState<MemoryWithMedia[]>([]);
   const [totalMemoriesCount, setTotalMemoriesCount] = useState<number>(0);
   const [upcomingCapsule, setUpcomingCapsule] = useState<TimeCapsule | null>(null);
   const [loadingExtra, setLoadingExtra] = useState(true);
@@ -146,14 +145,15 @@ export default function HomePage() {
       // Fetch Recent Memories (up to 5 for carousel)
       const { data: memoryData } = await supabase
         .from('memories')
-        .select('*')
+        .select('*, memory_media(*)')
         .eq('couple_id', coupleId)
         .order('created_at', { ascending: false })
+        .order('sort_order', { foreignTable: 'memory_media', ascending: true })
         .limit(5);
 
       if (memoryData) {
-        // Parallel batch resolution of signed URLs
-        const resolvedMemories = await batchResolveStorageUrls(supabase, memoryData);
+        // Parallel batch resolution of private media signed URLs. Videos render with metadata preload only.
+        const resolvedMemories = await resolveMemoryMediaUrls(supabase, normalizeMemoryRows(memoryData));
         setRecentMemories(resolvedMemories);
       }
 
@@ -551,12 +551,11 @@ export default function HomePage() {
                 className="block group snap-start shrink-0 w-[90%] sm:w-[80%]"
               >
                 <div className="relative rounded-[22px] overflow-hidden shadow-soft-sm border border-[rgba(232,109,145,0.12)]">
-                  {/* Optimized Next/Image Memory Display */}
-                  <MemoryImage
-                    src={mem.signed_url || mem.image_url}
-                    alt={mem.title}
+                  <MemoryMediaGallery
+                    media={mem.media}
+                    title={mem.title}
                     priority={index === 0}
-                    aspectRatio="aspect-[16/9]"
+                    layout="cover"
                   />
 
                   {/* Top-Right Image Counter Pill */}

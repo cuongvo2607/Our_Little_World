@@ -52,7 +52,7 @@ export async function resolveStorageUrl(
 /**
  * Batch resolves multiple storage paths in parallel using Promise.all
  */
-export async function batchResolveStorageUrls<T extends { image_url: string }>(
+export async function batchResolveStorageUrls<T extends { image_url: string | null }>(
   supabase: SupabaseClient,
   items: T[],
   bucketName = 'couple-memories'

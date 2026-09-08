@@ -32,9 +32,30 @@ export interface Memory {
   couple_id: string;
   created_by: string;
   title: string;
-  description: string;
+  description: string | null;
   memory_date: string;
-  image_url: string;
+  image_url: string | null;
+  location?: string | null;
+  created_at: string;
+  signed_url?: string;
+  media?: MemoryMedia[];
+  memory_media?: MemoryMedia[];
+}
+
+export type MemoryMediaType = 'image' | 'video';
+
+export interface MemoryMedia {
+  id: string;
+  memory_id: string;
+  couple_id: string;
+  storage_path: string;
+  media_type: MemoryMediaType;
+  mime_type: string;
+  file_size: number;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  sort_order: number;
   created_at: string;
   signed_url?: string;
 }
@@ -133,4 +154,3 @@ export type SunflowerStageLevel =
   | 'radiant' // 14-29 days 🌻✨ Rực rỡ
   | 'multi_flowers' // 30-99 days 🌻🌻 Nhiều hoa hơn
   | 'garden'; // 100+ days 🌻🌻👑 Vườn hướng dương
-

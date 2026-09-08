@@ -5,7 +5,7 @@ import { ActivityType } from '@/types';
 /**
  * Registers a daily activity for the current user in couple_daily_activities table
  */
-export async function registerUserActivity(activityType: ActivityType = 'message') {
+export async function registerUserActivity(activityType: ActivityType = 'message', sourceId?: string) {
   try {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -34,6 +34,7 @@ export async function registerUserActivity(activityType: ActivityType = 'message
           user_id: user.id,
           activity_date: todayDateStr,
           activity_type: activityType,
+          source_id: sourceId,
         },
         { onConflict: 'couple_id, user_id, activity_date' }
       );
