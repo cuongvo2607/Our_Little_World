@@ -1,7 +1,10 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { OUR_PLAYLIST, RepeatMode, Song } from '@/lib/music';
+import { createClient } from '@/lib/supabase/client';
+import { useCouple } from '@/context/CoupleContext';
+import { MUSIC_BUCKET, OUR_PLAYLIST, RepeatMode, Song } from '@/lib/music';
+import { resolveStorageUrl } from '@/lib/storage';
 
 type MusicPreferences = {
   songId: string;
@@ -22,6 +25,9 @@ type MusicContextValue = {
   repeatMode: RepeatMode;
   shuffle: boolean;
   error: string | null;
+  loadingSongs: boolean;
+  playlistError: string | null;
+  refreshSongs: () => Promise<void>;
   togglePlay: () => Promise<void>;
   playSong: (index: number) => Promise<void>;
   nextSong: () => Promise<void>;
@@ -53,7 +59,9 @@ function getRandomIndex(currentIndex: number, songCount: number) {
 }
 
 export function MusicProvider({ children }: { children: React.ReactNode }) {
-  const songs = OUR_PLAYLIST;
+  const { couple } = useCouple();
+  const supabase = useMemo(() => createClient(), []);
+  const [songs, setSongs] = useState<Song[]>(OUR_PLAYLIST);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const shouldResumeRef = useRef(false);
   const currentIndexRef = useRef(0);
@@ -67,9 +75,61 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
   const [shuffle, setShuffle] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingSongs, setLoadingSongs] = useState(true);
+  const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   const currentSong = songs[currentIndex] || songs[0];
+
+  const refreshSongs = useCallback(async () => {
+    if (!couple?.id) {
+      setSongs(OUR_PLAYLIST);
+      setLoadingSongs(false);
+      return;
+    }
+
+    setLoadingSongs(true);
+    setPlaylistError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('couple_songs')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        setSongs(OUR_PLAYLIST);
+        return;
+      }
+
+      const resolvedSongs = await Promise.all(
+        data.map(async (row: any) => ({
+          id: row.id,
+          title: row.title,
+          artist: row.artist || 'Nhạc của chúng mình',
+          audioPath: await resolveStorageUrl(supabase, row.audio_path, MUSIC_BUCKET),
+          coverPath: row.cover_path ? await resolveStorageUrl(supabase, row.cover_path, MUSIC_BUCKET) : undefined,
+          audioStoragePath: row.audio_path,
+          coverStoragePath: row.cover_path,
+          duration: row.duration,
+          sortOrder: row.sort_order,
+          source: 'supabase' as const,
+        }))
+      );
+
+      setSongs(resolvedSongs);
+    } catch (err) {
+      console.warn('[Music] Supabase playlist unavailable, using local fallback:', err);
+      setPlaylistError('Chưa thể tải playlist từ Supabase');
+      setSongs(OUR_PLAYLIST);
+    } finally {
+      setLoadingSongs(false);
+    }
+  }, [couple?.id, supabase]);
 
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -144,6 +204,27 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
   }, [songs.length]);
 
   useEffect(() => {
+    refreshSongs();
+  }, [refreshSongs]);
+
+  useEffect(() => {
+    if (!couple?.id) return;
+
+    const channel = supabase
+      .channel(`couple-songs-${couple.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_songs', filter: `couple_id=eq.${couple.id}` },
+        () => refreshSongs()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [couple?.id, refreshSongs, supabase]);
+
+  useEffect(() => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
@@ -160,6 +241,13 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     }
     setIsHydrated(true);
   }, [songs]);
+
+  useEffect(() => {
+    if (currentIndex >= songs.length) {
+      setCurrentIndex(0);
+      setCurrentTime(0);
+    }
+  }, [currentIndex, songs.length]);
 
   useEffect(() => {
     if (!isHydrated || !currentSong) return;
@@ -304,6 +392,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     repeatMode,
     shuffle,
     error,
+    loadingSongs,
+    playlistError,
     togglePlay,
     playSong,
     nextSong,
@@ -313,6 +403,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     toggleShuffle,
     cycleRepeatMode,
     retry,
+    refreshSongs,
   }), [
     songs,
     currentSong,
@@ -324,6 +415,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     repeatMode,
     shuffle,
     error,
+    loadingSongs,
+    playlistError,
     togglePlay,
     playSong,
     nextSong,
@@ -333,6 +426,7 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     toggleShuffle,
     cycleRepeatMode,
     retry,
+    refreshSongs,
   ]);
 
   return (
