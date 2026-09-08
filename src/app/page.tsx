@@ -124,6 +124,9 @@ export default function HomePage() {
 
   const router = useRouter();
   const supabase = createClient();
+  const quickTargetName = partnerProfile?.display_name?.trim() || 'người ấy';
+  const missQuickLabel = `Nhớ ${quickTargetName}`;
+  const loveQuickLabel = `Iu ${quickTargetName}`;
 
   useEffect(() => {
     if (couple?.id) {
@@ -475,30 +478,30 @@ export default function HomePage() {
         </h3>
 
         <div className="grid grid-cols-3 gap-2.5">
-          {/* Action 1: Nhớ cậu */}
+          {/* Action 1: Miss partner */}
           <motion.button
             whileTap={{ scale: 0.96 }}
-            onClick={() => handleSendQuickMessage('miss_you', 'Nhớ cậu 🫶')}
+            onClick={() => handleSendQuickMessage('miss_you', `${missQuickLabel} 🫶`)}
             disabled={quickMsgCooldown}
             className="flex flex-col items-center justify-center p-3.5 bg-[#FFFDF5] dark:bg-amber-950/20 rounded-[20px] border border-amber-100/80 dark:border-amber-900/30 shadow-soft-sm hover:border-amber-200 transition-all min-h-[96px]"
           >
             <div className="w-11 h-11 rounded-full bg-[#FFF4E5] text-[#D97706] flex items-center justify-center text-2xl mb-1.5 shadow-soft-sm">
               🫶
             </div>
-            <span className="text-xs font-bold text-[#E86D91]">Nhớ cậu</span>
+            <span className="text-xs font-bold text-[#E86D91] text-center leading-tight">{missQuickLabel}</span>
           </motion.button>
 
-          {/* Action 2: Yêu cậu */}
+          {/* Action 2: Love partner */}
           <motion.button
             whileTap={{ scale: 0.96 }}
-            onClick={() => handleSendQuickMessage('love_you', 'Yêu cậu ❤️')}
+            onClick={() => handleSendQuickMessage('love_you', `${loveQuickLabel} ❤️`)}
             disabled={quickMsgCooldown}
             className="flex flex-col items-center justify-center p-3.5 bg-[#FFF7FA] dark:bg-rose-950/20 rounded-[20px] border border-rose-100/80 dark:border-rose-900/30 shadow-soft-sm hover:border-rose-200 transition-all min-h-[96px]"
           >
             <div className="w-11 h-11 rounded-full bg-[#FCE7EF] text-[#E86D91] flex items-center justify-center text-2xl mb-1.5 shadow-soft-sm">
               ❤️
             </div>
-            <span className="text-xs font-bold text-[#E86D91]">Yêu cậu</span>
+            <span className="text-xs font-bold text-[#E86D91] text-center leading-tight">{loveQuickLabel}</span>
           </motion.button>
 
           {/* Action 3: Ôm một cái */}

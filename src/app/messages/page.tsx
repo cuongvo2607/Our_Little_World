@@ -25,6 +25,9 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+  const quickTargetName = partnerProfile?.display_name?.trim() || 'người ấy';
+  const missQuickLabel = `Nhớ ${quickTargetName}`;
+  const loveQuickLabel = `Iu ${quickTargetName}`;
 
   // Scroll to bottom helper using requestAnimationFrame for zero-lag layout response
   const scrollToBottom = useCallback((smooth = true) => {
@@ -276,10 +279,10 @@ export default function MessagesPage() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => handleSendMessage('miss_you', 'Tớ nhớ cậu 🫶')}
+            onClick={() => handleSendMessage('miss_you', `${missQuickLabel} 🫶`)}
             className="px-3 py-1.5 text-xs font-semibold bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 rounded-full hover:bg-rose-200 transition-colors shadow-soft-sm"
           >
-            🫶 Nhớ cậu
+            🫶 {missQuickLabel}
           </motion.button>
         </div>
       </div>
@@ -341,7 +344,7 @@ export default function MessagesPage() {
                     }`}
                   >
                     <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
-                      {msg.message || (msg.type === 'miss_you' ? 'Tớ nhớ cậu 🫶' : 'Yêu cậu ❤️')}
+                      {msg.message || (msg.type === 'miss_you' ? `Nhớ ${isMine ? quickTargetName : (userProfile?.display_name?.trim() || 'bạn')} 🫶` : `Iu ${isMine ? quickTargetName : (userProfile?.display_name?.trim() || 'bạn')} ❤️`)}
                     </p>
 
                     <div
@@ -400,17 +403,17 @@ export default function MessagesPage() {
           >
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => handleSendMessage('miss_you', 'Tớ nhớ cậu 🫶')}
+              onClick={() => handleSendMessage('miss_you', `${missQuickLabel} 🫶`)}
               className="px-3 py-1.5 text-xs bg-rose-100 text-rose-600 font-semibold rounded-xl"
             >
-              🫶 Nhớ cậu
+              🫶 {missQuickLabel}
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => handleSendMessage('love_you', 'Yêu cậu ❤️')}
+              onClick={() => handleSendMessage('love_you', `${loveQuickLabel} ❤️`)}
               className="px-3 py-1.5 text-xs bg-rose-100 text-rose-600 font-semibold rounded-xl"
             >
-              ❤️ Yêu cậu
+              ❤️ {loveQuickLabel}
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
