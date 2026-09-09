@@ -46,31 +46,28 @@ export function getPushPermissionState(): NotificationPermission | 'unsupported'
 }
 
 export async function createPartnerNotification(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   type: NotificationType,
   actionType?: string | null,
   referenceId?: string | null
 ) {
-  const { data, error } = await supabase.rpc('create_partner_notification', {
-    p_type: type,
-    p_action_type: actionType || null,
-    p_reference_id: referenceId || null,
+  const response = await fetch('/api/notifications/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    keepalive: true,
+    body: JSON.stringify({
+      type,
+      actionType: actionType || null,
+      referenceId: referenceId || null,
+    }),
   });
 
-  if (error) throw error;
-
-  const notification = data as AppNotification;
-  if (notification?.id) {
-    fetch('/api/notifications/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notificationId: notification.id }),
-    }).catch((err) => {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[Notifications] Push dispatch failed:', err);
-      }
-    });
+  if (!response.ok) {
+    throw new Error('Could not create notification');
   }
 
-  return notification;
+  const { notification } = await response.json();
+
+  return notification as AppNotification;
 }

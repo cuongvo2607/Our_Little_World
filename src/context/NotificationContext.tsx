@@ -122,6 +122,38 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     router.push(notification.url || '/');
   }, [markRead, router]);
 
+  const savePushSubscription = useCallback(async () => {
+    if (!supportsWebPush()) {
+      setPushPermission('unsupported');
+      throw new Error('Web Push is not supported');
+    }
+
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
+      throw new Error('Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY');
+    }
+
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register('/sw.js');
+    }
+
+    const readyRegistration = await navigator.serviceWorker.ready;
+    const existingSubscription = await readyRegistration.pushManager.getSubscription();
+    const subscription = existingSubscription || await readyRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+    });
+
+    const response = await fetch('/api/push-subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(subscription.toJSON()),
+    });
+
+    if (!response.ok) throw new Error('Could not save push subscription');
+  }, []);
+
   const enablePushNotifications = useCallback(async () => {
     setPushError(null);
 
@@ -146,36 +178,28 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      let registration = await navigator.serviceWorker.getRegistration();
-      if (!registration) {
-        registration = await navigator.serviceWorker.register('/sw.js');
-      }
-
-      await navigator.serviceWorker.ready;
-      const existingSubscription = await registration.pushManager.getSubscription();
-      const subscription = existingSubscription || await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
-      });
-
-      const response = await fetch('/api/push-subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-
-      if (!response.ok) throw new Error('Could not save push subscription');
+      await savePushSubscription();
     } catch (err) {
       console.error('[Notifications] Enable push failed:', err);
       setPushError('Không thể bật thông báo. Vui lòng thử lại.');
     } finally {
       setPushSaving(false);
     }
-  }, []);
+  }, [savePushSubscription]);
 
   useEffect(() => {
     setPushPermission(getPushPermissionState());
   }, []);
+
+  useEffect(() => {
+    if (!user?.id || getPushPermissionState() !== 'granted') return;
+
+    savePushSubscription().catch((err) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[Notifications] Could not refresh push subscription:', err);
+      }
+    });
+  }, [savePushSubscription, user?.id]);
 
   useEffect(() => {
     fetchNotifications();
