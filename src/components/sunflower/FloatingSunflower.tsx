@@ -34,6 +34,12 @@ export function FloatingSunflower() {
   const streakCount = streakData?.current_streak || 0;
   const isMilestone = [7, 14, 30, 50, 100, 365].includes(streakCount) && isTodayCompleted;
 
+  useEffect(() => {
+    if (!isYesterdayMissed) {
+      setIsMissedModalOpen(false);
+    }
+  }, [isYesterdayMissed]);
+
   // Hide floating sunflower until mounted or on login/onboarding
   if (!mounted || ['/login', '/onboarding'].includes(pathname)) {
     return null;
@@ -106,11 +112,11 @@ export function FloatingSunflower() {
 
       {/* Missed Day Rescue Water Modal */}
       <MissedDayModal
-        isOpen={isYesterdayMissed && !isSheetOpen}
+        isOpen={isYesterdayMissed && !isSheetOpen && !isMissedModalOpen}
         streakDays={streakCount}
         waterTokens={streakData?.water_tokens ?? 1}
         onUseWater={consumeRescueWater}
-        onClose={() => setIsMissedModalOpen(false)}
+        onClose={() => setIsMissedModalOpen(true)}
       />
     </>
   );

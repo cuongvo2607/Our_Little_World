@@ -337,17 +337,38 @@ export function useSunflowerStreak() {
   };
 
   const consumeRescueWater = async () => {
-    try {
-      await supabase
-        .from('couple_streaks')
-        .update({ water_tokens: Math.max(0, (streakData.water_tokens || 1) - 1) })
-        .eq('couple_id', couple?.id);
-    } catch {
-      // Table may not exist yet
+    if (!couple?.id || streakData.water_tokens <= 0) {
+      return false;
     }
-    setIsYesterdayMissed(false);
-    await fetchStreakData();
-    return true;
+
+    try {
+      const { data: updatedRows, error: updateError } = await supabase
+        .from('couple_streaks')
+        .update({ water_tokens: Math.max(0, streakData.water_tokens - 1) })
+        .eq('couple_id', couple.id)
+        .select('id');
+
+      if (updateError) throw updateError;
+
+      if (!updatedRows || updatedRows.length === 0) {
+        const { error: insertError } = await supabase.from('couple_streaks').insert({
+          couple_id: couple.id,
+          current_streak: Math.max(streakData.current_streak, 1),
+          max_streak: Math.max(streakData.max_streak, streakData.current_streak, 1),
+          water_tokens: Math.max(0, streakData.water_tokens - 1),
+          last_calculated_date: todayDateStr,
+        });
+
+        if (insertError) throw insertError;
+      }
+
+      setIsYesterdayMissed(false);
+      await fetchStreakData();
+      return true;
+    } catch (error) {
+      console.error('[SUNFLOWER] Failed to consume rescue water:', error);
+      return false;
+    }
   };
 
   const isTodayCompleted = !!(myActivityToday && partnerActivityToday);
