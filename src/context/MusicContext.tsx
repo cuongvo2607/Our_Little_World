@@ -269,6 +269,12 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     if (!audio || !currentSong) return;
 
     setError(null);
+    if (!currentSong.audioPath) {
+      audio.removeAttribute('src');
+      audio.load();
+      return;
+    }
+
     audio.src = currentSong.audioPath;
     audio.load();
 
@@ -310,7 +316,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
 
   const playCurrentAudio = useCallback(async () => {
     const audio = audioRef.current;
-    if (!audio || !currentSong) return;
+    if (!audio || !currentSong || !currentSong.audioPath) {
+      setError('Chưa có bài hát trong playlist');
+      return;
+    }
 
     if (!audio.src || !audio.src.endsWith(currentSong.audioPath)) {
       audio.src = currentSong.audioPath;

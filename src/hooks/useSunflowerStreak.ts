@@ -204,39 +204,32 @@ export function useSunflowerStreak() {
       yesterdayDateObj.setDate(todayDateObj.getDate() - 1);
       const yesterdayDateStr = getVietnamDateString(yesterdayDateObj);
 
+      const getStreakEndingAt = (date: Date) => {
+        let streak = 0;
+        const checkDate = new Date(date);
+
+        while (isDateCompleted(getVietnamDateString(checkDate))) {
+          streak += 1;
+          checkDate.setDate(checkDate.getDate() - 1);
+        }
+
+        return streak;
+      };
+
       let currentStreak = 0;
       const todayCompleted = isDateCompleted(todayDateStr);
 
       if (todayCompleted) {
-        currentStreak = 1;
-        let checkDate = new Date();
-        checkDate.setDate(checkDate.getDate() - 1);
-        while (true) {
-          const dk = getVietnamDateString(checkDate);
-          if (isDateCompleted(dk)) {
-            currentStreak += 1;
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else {
-            break;
-          }
-        }
+        currentStreak = getStreakEndingAt(todayDateObj);
       } else {
         const yesterdayCompleted = isDateCompleted(yesterdayDateStr);
         if (yesterdayCompleted) {
-          currentStreak = 1;
-          let checkDate = new Date();
-          checkDate.setDate(checkDate.getDate() - 2);
-          while (true) {
-            const dk = getVietnamDateString(checkDate);
-            if (isDateCompleted(dk)) {
-              currentStreak += 1;
-              checkDate.setDate(checkDate.getDate() - 1);
-            } else {
-              break;
-            }
-          }
+          currentStreak = getStreakEndingAt(yesterdayDateObj);
         } else {
-          currentStreak = 0;
+          // Keep the pre-missed streak visible while the rescue modal is open.
+          const dayBeforeYesterday = new Date(yesterdayDateObj);
+          dayBeforeYesterday.setDate(dayBeforeYesterday.getDate() - 1);
+          currentStreak = getStreakEndingAt(dayBeforeYesterday);
         }
       }
 
@@ -262,10 +255,10 @@ export function useSunflowerStreak() {
       }
 
       const yesterdayCompleted = isDateCompleted(yesterdayDateStr);
-      const pastDates = allDates.filter((d) => d < yesterdayDateStr);
-      const hasPriorActivity = pastDates.some((d) => isDateCompleted(d));
+      const wasRescuedToday = storedStreakRow?.last_calculated_date === todayDateStr
+        && (storedStreakRow?.current_streak || 0) > 0;
 
-      if (!yesterdayCompleted && hasPriorActivity && currentStreak === 0) {
+      if (!yesterdayCompleted && currentStreak > 0 && !wasRescuedToday) {
         setIsYesterdayMissed(true);
       } else {
         setIsYesterdayMissed(false);
@@ -344,7 +337,12 @@ export function useSunflowerStreak() {
     try {
       const { data: updatedRows, error: updateError } = await supabase
         .from('couple_streaks')
-        .update({ water_tokens: Math.max(0, streakData.water_tokens - 1) })
+        .update({
+          current_streak: Math.max(streakData.current_streak, 1),
+          max_streak: Math.max(streakData.max_streak, streakData.current_streak, 1),
+          water_tokens: Math.max(0, streakData.water_tokens - 1),
+          last_calculated_date: todayDateStr,
+        })
         .eq('couple_id', couple.id)
         .select('id');
 

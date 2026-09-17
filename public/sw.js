@@ -1,4 +1,4 @@
-const CACHE_NAME = 'our-little-world-v2';
+const CACHE_NAME = 'our-little-world-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',

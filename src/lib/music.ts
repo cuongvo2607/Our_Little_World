@@ -29,25 +29,10 @@ export const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a'];
 
 export const OUR_PLAYLIST: Song[] = [
   {
-    id: 'dem-ngay-xa-em',
-    title: 'Đếm Ngày Xa Em',
+    id: 'empty-playlist',
+    title: 'Chưa có bài hát',
     artist: 'Nhạc của chúng mình',
-    audioPath: '/music/dem-ngay-xa-em.mp3',
-    coverPath: '/music/covers/dem-ngay-xa-em.jpg',
-  },
-  {
-    id: 'co-em-cho',
-    title: 'Có Em Chờ',
-    artist: 'Nhạc của chúng mình',
-    audioPath: '/music/co-em-cho.mp3',
-    coverPath: '/music/covers/co-em-cho.jpg',
-  },
-  {
-    id: 'den-khi-nao',
-    title: 'Đến Khi Nào',
-    artist: 'Nhạc của chúng mình',
-    audioPath: '/music/den-khi-nao.mp3',
-    coverPath: '/music/covers/den-khi-nao.jpg',
+    audioPath: '',
   },
 ];
 
